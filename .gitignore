@@ -5,7 +5,7 @@
 *.docx
 
 # INI config files
-*.ini
+config.ini
 
 # .twbr files
 *.twbr
