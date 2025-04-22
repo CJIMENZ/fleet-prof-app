@@ -1,0 +1,17 @@
+# Excel workbooks
+*.xlsx
+
+# Word documents
+*.docx
+
+# INI config files
+*.ini
+
+# .twbr files
+*.twbr
+
+# .twb files
+*.twb
+
+# .twbx files
+*.twbx
