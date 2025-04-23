@@ -1,286 +1,318 @@
+#!/usr/bin/env python3
 # modules/unalloc_distribution.py
+"""
+Distribute unallocated Sand, Handling, Chemical, and Daily costs
+----------------------------------------------------------------
+Steps
+1.  Pull *unallocated* lines from “P. VM - Unalloc” **and** the
+    non-6-digit rows (the true unalloc-txn lines) in “P. VM - Adjustments”.
+    ➜  Combined DF = NUMERATOR   (printed & written)
+2.  Pull activity metrics from Database/Main-Combo + Chem Cost totals
+    from “P. VM - Current” (only projects that exist in Main-Combo).
+    ➜  Basin-level METRICS table = DENOMINATOR (printed & written)
+3.  Build allocation ratios per basin, detect “orphans” where the
+    denominator is 0, sprinkle those across active basins (≠ CA),
+    and print three debug tables:
+        3-a  orphan costs
+        3-b  orphan ratios
+        3-c  final basin ratios            (printed & written)
+4.  Copy Main-Combo and append the four allocated cost columns
+    (Unalloc_Sand / _Handle / _Chem / _Daily).               (printed & written)
 
-import datetime
+Every DF shown in the console is also dropped into the worksheet
+in the same order, separated by a blank row and a bold section title.
+"""
+
+from __future__ import annotations
+import datetime, re, sys, traceback
+from pathlib import Path
 from typing import List, Dict
 
 import pandas as pd
 from openpyxl import load_workbook
-from openpyxl.utils import get_column_letter
 from openpyxl.styles import PatternFill, Font, Alignment
+from openpyxl.utils.dataframe import dataframe_to_rows
 
-#----- CONFIG & CONSTANTS --------------------------------------------------------------------
-LIGHT_GRAY = PatternFill(fill_type="solid", fgColor="DDDDDD")
+# ── Formatting ─────────────────────────────────────────────────────────────
+LIGHT_GRAY   = PatternFill(fill_type="solid", fgColor="DDDDDD")
+HEADER_FILL  = PatternFill(fill_type="solid", fgColor="C0C0C0")
 CURRENCY_FMT = '$#,##0.00'
 NUMBER_FMT   = '#,##0.00'
-#---------------------------------------------------------------------------------------------
 
-def run_unalloc_distribution(workbook_path: str, month_start: datetime.date, month_end: datetime.date):
+# ── Column header normalisation ────────────────────────────────────────────
+RENAME_MAP = {
+    'ENG BASIN R1':              'LBRT BASIN',
+    'Chemical and Gel cost':     'Chem Cost',
+    'Mat and Containment Costs': 'Mat Cost',
+    'Other Pad Costs':           'Other Pad Cost',
+    'Allocation VM':             'Alloc VM Cost',
+    # sometimes Current sheet header shows “Chemical cost”
+    'Chemical cost':             'Chem Cost',
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+def _find_sheet_name(wb, keywords: List[str]) -> str:
+    """Return the first sheet whose name contains *all* keywords (case-insensitive)."""
+    for name in wb.sheetnames:
+        lname = name.lower()
+        if all(k.lower() in lname for k in keywords):
+            return name
+    raise KeyError(f"No sheet name contains keywords: {keywords!r}")
+
+# -------------------------------------------------------------------------- 
+def _read_pvm_body(workbook_path: str, sheet_name: str) -> pd.DataFrame:
     """
-    Read P.VM sheets (even if hidden/dashed) and Database/Main_Combo,
-    compute unallocated cost distributions, and write "Unalloc_Distribution" sheet.
+    Read any P. VM sheet whose *real* data begin in row 4 (header row 1,
+    grand-total row 2, blank row 3).  Returns a cleaned DataFrame.
     """
-    import sys, traceback
-    print(f"[DEBUG] ▶ Starting unalloc distribution for {workbook_path}", flush=True)
-    print(f"[DEBUG]    month_start={month_start}, month_end={month_end}", flush=True)
-
-    #----- load workbook with values (even if sheet is hidden) ------------------------------------
-    wb = load_workbook(workbook_path, data_only=True)
-    print(f"[DEBUG]    loaded sheets: {wb.sheetnames}", flush=True)
-
-    #----- helper: locate sheet by keywords (case-insensitive) ------------------------------------
-    def find_sheet(keywords: List[str]) -> str:
-        for name in wb.sheetnames:
-            lname = name.lower()
-            if all(k.lower() in lname for k in keywords):
-                return name
-        raise KeyError(f"No sheet matching keywords {keywords}")
-
-    #----- helper: sheet -> DataFrame ---------------------------------------------------------------
-    def sheet_to_df(ws) -> pd.DataFrame:
-        it = ws.values
-        hdr = next(it)
-        cols = [str(h).strip() for h in hdr]
-        return pd.DataFrame(it, columns=cols)
-
-    #----- read Main_Combo from "Database" sheet -------------------------------------------------------
-    df_main = pd.read_excel(
+    df = pd.read_excel(
         workbook_path,
-        sheet_name='Database',
-        header=1,
-        usecols='A:P',
-        engine='openpyxl'
-    ).dropna(how='all', subset=['Pad No'])
-    print(f"[DEBUG] df_main: shape={df_main.shape}", flush=True)
-    print(f"[DEBUG] df_main columns: {df_main.columns.tolist()}", flush=True)
-
-    # normalize Main_Combo headers
-    df_main.columns = [c.strip() for c in df_main.columns]
-    df_main.rename(columns={'PAD START': 'Pad Start', 'PAD END': 'Pad End'}, inplace=True)
-
-    # compute pad_days (clamp into month window)
-    df_main['Pad Start'] = pd.to_datetime(df_main['Pad Start'])
-    df_main['Pad End']   = pd.to_datetime(df_main['Pad End'])
-    ms = pd.Timestamp(month_start)
-    me = pd.Timestamp(month_end)
-    df_main['pad_days'] = (
-        df_main['Pad End'].clip(upper=me)
-        - df_main['Pad Start'].clip(lower=ms)
-    ).dt.days.clip(lower=0)
-    print(f"[DEBUG] pad_days range: min={df_main['pad_days'].min()}, max={df_main['pad_days'].max()}", flush=True)
-
-    #----- read & normalize P.VM sheets ---------------------------------------------------------------
-    df_unalloc = sheet_to_df(wb[find_sheet(['p. vm', 'unalloc'])])
-    df_adjust  = sheet_to_df(wb[find_sheet(['p. vm', 'adjustments'])])
-    df_current = sheet_to_df(wb[find_sheet(['p. vm', 'current'])])
-    print(f"[DEBUG] df_unalloc: shape={df_unalloc.shape}", flush=True)
-    print(f"[DEBUG] df_unalloc cols: {df_unalloc.columns.tolist()}", flush=True)
-    print(f"[DEBUG] df_current: shape={df_current.shape}", flush=True)
-    print(f"[DEBUG] df_current cols: {df_current.columns.tolist()}", flush=True)
-
-    #──────────────────────── header normalisation ────────────────────────
-    rename_map = {
-        'ENG BASIN R1':              'LBRT BASIN',
-        'Chemical and Gel cost':     'Chem Cost',
-        'Mat and Containment Costs': 'Mat Cost',
-        'Other Pad Costs':           'Other Pad Cost',
-        'Allocation VM':             'Alloc VM Cost',
-    }
-    for _df in (df_unalloc, df_adjust, df_current):
-        _df.columns = [str(c).strip() for c in _df.columns]   # trim whitespace
-        _df.rename(columns=rename_map, inplace=True)
-
-    print(f"[DEBUG] df_current columns AFTER rename: {df_current.columns.tolist()}", flush=True)
-
-    # filter only blank or non-6-digit project numbers
-    mask = ~df_unalloc['Project Number'].astype(str).str.match(r'^\d{6}$')
-    df_unalloc = df_unalloc.loc[mask]
-    df_adjust  = df_adjust.loc[mask]
-
-    #----- aggregate unalloc by basin -----------------------------------------------------------------
-    grp_u = df_unalloc.groupby('LBRT BASIN')
-    sand_unalloc   = grp_u['Prop Cost'].sum()
-    handle_unalloc = grp_u['Truck Cost'].sum()
-    # debug: show unalloc shapes and basin list
-    print(f"[DEBUG] sand_unalloc  shape={sand_unalloc.shape}, basins={list(sand_unalloc.index)}", flush=True)
-    print(f"[DEBUG] handle_unalloc shape={handle_unalloc.shape}, basins={list(handle_unalloc.index)}", flush=True)
-
-    # sum the four daily-cost columns per pad then basin-sum
-    row_daily     = df_unalloc[['Fuel Cost','Mat Cost','Other Pad Cost','Alloc VM Cost']].sum(axis=1)
-    daily_unalloc = row_daily.groupby(df_unalloc['LBRT BASIN']).sum()
-    print(f"[DEBUG] daily_unalloc shape={daily_unalloc.shape}, basins={list(daily_unalloc.index)}", flush=True)
-
-    chem_unalloc = df_current.groupby('LBRT BASIN')['Chem Cost'].sum()
-
-    grp_m      = df_main.groupby('LBRT BASIN')
-    prop_total = grp_m['Prop TN'].sum()
-    day_total  = grp_m['pad_days'].sum()
-    chem_total = df_current.groupby('LBRT BASIN')['Chem Cost'].sum()
-
-    #─────────────────────────────────────────────────────────────────────────
-    # 🔑  ALIGN **all** numerator & denominator Series to one master index
-    #─────────────────────────────────────────────────────────────────────────
-    basin_union = (
-        sand_unalloc.index
-        .union(handle_unalloc.index)
-        .union(daily_unalloc.index)
-        .union(chem_unalloc.index)
-        .union(prop_total.index)
-        .union(day_total.index)
-        .union(chem_total.index)
+        sheet_name=sheet_name,
+        header=0,            # row 1 is header
+        engine="openpyxl"
     )
+    df = df.iloc[2:]        # drop GT + blank
+    df = df.dropna(how="all")          # strip empty rows at bottom
+    df.columns = [str(c).strip() for c in df.columns]
+    df.rename(columns=RENAME_MAP, inplace=True)
+    return df.reset_index(drop=True)
 
-    def _fx(s):  # helper: reindex & fill NaN with 0
-        return s.reindex(basin_union, fill_value=0)
+# -------------------------------------------------------------------------- 
+def _read_pvm_adjustments(workbook_path: str, sheet_name: str) -> pd.DataFrame:
+    """
+    “P. VM - Adjustments” has summary stuff first; real header is on row 18,
+    data start on row 19.
+    """
+    df = pd.read_excel(
+        workbook_path,
+        sheet_name=sheet_name,
+        header=17,           # Excel row 18
+        engine="openpyxl"
+    )
+    df = df.dropna(how="all")
+    df.columns = [str(c).strip() for c in df.columns]
+    df.rename(columns=RENAME_MAP, inplace=True)
+    return df.reset_index(drop=True)
 
-    sand_unalloc   = _fx(sand_unalloc)
-    handle_unalloc = _fx(handle_unalloc)
-    daily_unalloc  = _fx(daily_unalloc)
-    chem_unalloc   = _fx(chem_unalloc)
+# -------------------------------------------------------------------------- 
+def _read_main_combo(workbook_path: str) -> pd.DataFrame:
+    df = pd.read_excel(
+        workbook_path,
+        sheet_name="Database",
+        header=1,            # Excel row 2
+        usecols="A:P",
+        engine="openpyxl"
+    )
+    df = df.dropna(how="all", subset=["Pad No"])
+    df.columns = [c.strip() for c in df.columns]
+    df.rename(columns={"PAD START":"Pad Start", "PAD END":"Pad End"}, inplace=True)
+    return df.reset_index(drop=True)
 
-    prop_total = _fx(prop_total)
-    day_total  = _fx(day_total)
-    chem_total = _fx(chem_total)
+# ═══════════════════════════════════════════════════════════════════════════
+def run_unalloc_distribution(
+        workbook_path: str,
+        month_start: datetime.date,
+        month_end:   datetime.date
+) -> None:
 
-    print("[DEBUG] aligned shapes →", 
-          {k: v.shape for k, v in {
-              'sand_unalloc': sand_unalloc,
-              'handle_unalloc': handle_unalloc,
-              'daily_unalloc': daily_unalloc,
-              'chem_unalloc': chem_unalloc,
-              'prop_total': prop_total,
-              'day_total': day_total,
-              'chem_total': chem_total
-          }.items()}, flush=True)
+    print(f"\n[INFO] ► Unalloc Distribution run for: {workbook_path}")
+    print(f"       Window: {month_start} → {month_end}\n")
 
-    #───────────────────────────────────────────────────────────────────────
-    # 🔄  Inject per-pad Chem Cost from P. VM – Current
-    #───────────────────────────────────────────────────────────────────────
-    chem_by_pad = df_current.groupby('Project Number')['Chem Cost'].sum()
-    df_main['Chem Cost'] = df_main['Pad No'].map(chem_by_pad).fillna(0)
-    print("[DEBUG] mapped Chem Cost onto df_main; non-zero pads:",
-          (df_main['Chem Cost'] > 0).sum(), flush=True)
+    try:
+        wb = load_workbook(workbook_path, data_only=True)   # keep open for write-back
+    except Exception:
+        traceback.print_exc(); sys.exit(1)
 
-    # helper / safe ratio  (run *after* alignment)
-    def compute_ratio(unalloc, denom):
-        r = unalloc.div(denom).replace([pd.NA, pd.NaT, float('inf')], 0)
-        return r.fillna(0)
+    # ── Pull ALL raw data first ───────────────────────────────────────────
+    sheet_unalloc  = _find_sheet_name(wb, ["p. vm", "unalloc"])
+    sheet_current  = _find_sheet_name(wb, ["p. vm", "current"])
+    sheet_adj      = _find_sheet_name(wb, ["p. vm", "adjust"])
 
-    ratio_sand   = compute_ratio(sand_unalloc,   prop_total)
-    ratio_handle = compute_ratio(handle_unalloc, prop_total)
-    ratio_chem   = compute_ratio(chem_unalloc,   chem_total)
-    ratio_daily  = compute_ratio(daily_unalloc,  day_total)
+    df_unalloc_raw = _read_pvm_body(workbook_path, sheet_unalloc)
+    df_current_raw = _read_pvm_body(workbook_path, sheet_current)
+    df_adjust_raw  = _read_pvm_adjustments(workbook_path, sheet_adj)
+    df_main_raw    = _read_main_combo(workbook_path)
 
-    #----- sprinkle zero-activity basins ----------------------------------------------------------------
-    def sprinkle(ratio, unalloc, denom):
+    # ---- print raw pulls -------------------------------------------------
+    def _dbg(df, tag):
+        print(f"[DEBUG] {tag}: shape={df.shape}")
+        print(df.head(6).to_string(index=False), "\n")
+
+    _dbg(df_unalloc_raw, "P. VM – Unalloc  (raw)")
+    _dbg(df_adjust_raw,  "P. VM – Adjustments (raw)")
+    _dbg(df_current_raw, "P. VM – Current  (raw)")
+    _dbg(df_main_raw,    "Main_Combo (raw)")
+
+    # ╔════════ STEP 1 ═══════════════════════════════════════════════════╗
+    # Combine unallocated lines  (numerator)
+    non_six = lambda s: ~s.astype(str).str.match(r"^\d{6}$")
+
+    df_unalloc_num = df_unalloc_raw.copy()                                 # already non-6-digit
+    df_adj_num     = df_adjust_raw.loc[non_six(df_adjust_raw["Project Number"])]
+    df_num = pd.concat([df_unalloc_num, df_adj_num], ignore_index=True)
+
+    _dbg(df_num, "STEP 1 ► COMBINED NUMERATOR")
+
+    # ╔════════ STEP 2 ═══════════════════════════════════════════════════╗
+    # Build denominator metrics
+    df_main = df_main_raw.copy()
+    # Pad-day calc (clamped to month)
+    df_main["Pad Start"] = pd.to_datetime(df_main["Pad Start"])
+    df_main["Pad End"]   = pd.to_datetime(df_main["Pad End"])
+    ms, me = pd.Timestamp(month_start), pd.Timestamp(month_end)
+    df_main["pad_days"] = (
+        df_main["Pad End"].clip(upper=me) -
+        df_main["Pad Start"].clip(lower=ms)
+    ).dt.days.clip(lower=0)
+
+    # Chem cost (only pads present in Main-Combo)
+    df_current = df_current_raw.copy()
+    chem_by_pad = df_current.groupby("Project Number")["Chem Cost"].sum()
+    df_main["Chem Cost"] = df_main["Pad No"].map(chem_by_pad).fillna(0)
+
+    # Basin-level denominator
+    grp_m      = df_main.groupby("LBRT BASIN")
+    prop_total = grp_m["Prop TN"].sum()
+    day_total  = grp_m["pad_days"].sum()
+    chem_total = grp_m["Chem Cost"].sum()
+
+    df_den = pd.DataFrame({
+        "Basin":     prop_total.index,
+        "PropTotal": prop_total.values,
+        "DayTotal":  day_total.reindex(prop_total.index, fill_value=0).values,
+        "ChemTotal": chem_total.reindex(prop_total.index, fill_value=0).values
+    })
+
+    _dbg(df_den, "STEP 2 ► DENOMINATOR (Metrics)")
+
+    # ╔════════ STEP 3 ═══════════════════════════════════════════════════╗
+    # Build unalloc totals by basin  (numerator   ↓)
+    grp_u  = df_num.groupby("LBRT BASIN")
+    sand_u = grp_u["Prop Cost"].sum()
+    hand_u = grp_u["Truck Cost"].sum()
+    daily_u = (
+        df_num[["Fuel Cost","Mat Cost","Other Pad Cost","Alloc VM Cost"]]
+        .sum(axis=1)
+        .groupby(df_num["LBRT BASIN"]).sum()
+    )
+    chem_u = grp_u["Chem Cost"].sum()
+
+    # Prepare aligned series
+    basins = df_den["Basin"].unique()
+    def _al(s):
+        return s.reindex(basins, fill_value=0)
+
+    sand_u, hand_u, daily_u, chem_u = map(_al, (sand_u, hand_u, daily_u, chem_u))
+    prop_total, day_total, chem_total = map(_al, (prop_total, day_total, chem_total))
+
+    # -- orphan helper ----------------------------------------------------
+    def _ratio(unalloc, denom):
+        with pd.option_context("mode.use_inf_as_na", True):
+            r = (unalloc / denom).fillna(0)
+        return r
+
+    def _sprinkle(unalloc, denom, base_ratio):
+        """Return final ratio after sprinkling orphans (denom == 0)."""
         zero_mask = (denom == 0) & (unalloc > 0)
-        pool = unalloc[zero_mask].sum()
-        valid = denom[(denom > 0) & (ratio.index != 'CA')]
-        spr = pool / valid.sum() if valid.sum() else 0
-        out = ratio.copy().reindex(denom.index, fill_value=0)
-        for b in denom.index:
-            out[b] += spr if (denom[b] > 0 and b != 'CA') else 0
-        return out
+        orphan_cost = unalloc[zero_mask].sum()
+        valid_mask  = (denom > 0) & (base_ratio.index != "CA")
+        pool = denom[valid_mask].sum()
+        orphan_ratio = orphan_cost / pool if pool else 0
+        final = base_ratio.copy()
+        final.loc[valid_mask] += orphan_ratio
+        return orphan_cost, orphan_ratio, final
 
-    final_sand   = sprinkle(ratio_sand,   sand_unalloc,   prop_total)
-    final_handle = sprinkle(ratio_handle, handle_unalloc, prop_total)
-    final_chem   = sprinkle(ratio_chem,   chem_unalloc,   chem_total)
-    final_daily  = sprinkle(ratio_daily,  daily_unalloc,  day_total)
+    # -- Compute base ratios ---------------------------------------------
+    ratio_sand   = _ratio(sand_u,  prop_total)
+    ratio_handle = _ratio(hand_u,  prop_total)
+    ratio_daily  = _ratio(daily_u, day_total)
+    ratio_chem   = _ratio(chem_u,  chem_total)
 
-    #----- DEBUG: shapes of final series before alignment ------------------------------------------------
-    print(f"[DEBUG] final_sand:   shape={final_sand.shape}, index={list(final_sand.index)}", flush=True)
-    print(f"[DEBUG] final_handle: shape={final_handle.shape}, index={list(final_handle.index)}", flush=True)
-    print(f"[DEBUG] final_chem:   shape={final_chem.shape}, index={list(final_chem.index)}", flush=True)
-    print(f"[DEBUG] final_daily:  shape={final_daily.shape}, index={list(final_daily.index)}", flush=True)
+    # -- Sprinkle ---------------------------------------------------------
+    orphan_sand,   orph_r_sand,   final_sand   = _sprinkle(sand_u,  prop_total, ratio_sand)
+    orphan_handle, orph_r_handle, final_handle = _sprinkle(hand_u,  prop_total, ratio_handle)
+    orphan_daily,  orph_r_daily,  final_daily  = _sprinkle(daily_u, day_total,  ratio_daily)
+    orphan_chem,   orph_r_chem,   final_chem   = _sprinkle(chem_u,  chem_total, ratio_chem)
 
-    #----- ALIGN all numerator & ratio series to the same basin list -----------------------------------
-    basin_index = prop_total.index
-    sand_unalloc   = sand_unalloc.reindex(basin_index, fill_value=0)
-    handle_unalloc = handle_unalloc.reindex(basin_index, fill_value=0)
-    chem_unalloc   = chem_unalloc.reindex(basin_index, fill_value=0)
-    daily_unalloc  = daily_unalloc.reindex(basin_index, fill_value=0)
-    final_sand     = final_sand.reindex(basin_index,   fill_value=0)
-    final_handle   = final_handle.reindex(basin_index, fill_value=0)
-    final_chem     = final_chem.reindex(basin_index,   fill_value=0)
-    final_daily    = final_daily.reindex(basin_index,  fill_value=0)
-    print(f"[DEBUG] AFTER reindex all shapes: sand={sand_unalloc.shape}, handle={handle_unalloc.shape}, chem={chem_unalloc.shape}, daily={daily_unalloc.shape}", flush=True)
-    print(f"[DEBUG] RATIOS reindexed: sand={final_sand.shape}, handle={final_handle.shape}, chem={final_chem.shape}, daily={final_daily.shape}", flush=True)
+    # -- Debug tables -----------------------------------------------------
+    df_orphans = pd.DataFrame({
+        "Metric": ["Sand","Handle","Daily","Chem"],
+        "OrphanCost": [orphan_sand, orphan_handle, orphan_daily, orphan_chem]
+    })
+    _dbg(df_orphans, "STEP 3-a ► ORPHAN COSTS")
 
-    # now every series has length = len(basin_index) = 9
-    #----- build summary DataFrame --------------------------------------------------------------------
-    df_summary = pd.DataFrame({
-        'Basin':         basin_index,
-        'SandUnalloc':   sand_unalloc,
-        'PropTotal':     prop_total,
-        'RatioSand':     final_sand,
-        'HandleUnalloc': handle_unalloc,
-        'RatioHandle':   final_handle,
-        'ChemUnalloc':   chem_unalloc,
-        'RatioChem':     final_chem,
-        'DailyUnalloc':  daily_unalloc,
-        'DayTotal':      day_total,
-        'RatioDaily':    final_daily,
-    }).fillna(0).reset_index(drop=True)
+    df_orphan_ratio = pd.DataFrame({
+        "Metric": ["Sand","Handle","Daily","Chem"],
+        "OrphanRatio": [orph_r_sand, orph_r_handle, orph_r_daily, orph_r_chem]
+    })
+    _dbg(df_orphan_ratio, "STEP 3-b ► ORPHAN RATIOS  (added to active basins ≠ CA)")
 
-    # add totals row
-    totals = df_summary[['SandUnalloc','PropTotal','HandleUnalloc','ChemUnalloc','DailyUnalloc','DayTotal']].sum()
-    df_summary.loc[len(df_summary)] = ['TOTAL',
-                                      totals['SandUnalloc'],
-                                      totals['PropTotal'],
-                                      '',  # ratios not summed
-                                      totals['HandleUnalloc'],
-                                      '',
-                                      totals['ChemUnalloc'],
-                                      '',
-                                      totals['DailyUnalloc'],
-                                      totals['DayTotal'],
-                                      '']
+    df_ratios = pd.DataFrame({
+        "Basin": final_sand.index,
+        "RatioSand":   final_sand.values,
+        "RatioHandle": final_handle.values,
+        "RatioDaily":  final_daily.values,
+        "RatioChem":   final_chem.values
+    })
+    _dbg(df_ratios, "STEP 3-c ► FINAL BASIN RATIOS")
 
-    #----- compute pad-level distributions -------------------------------------------------------------
-    df_main = df_main.copy()
-    df_main['Unalloc_Sand']   = df_main['Prop TN']   * df_main['LBRT BASIN'].map(final_sand)
-    df_main['Unalloc_Handle'] = df_main['Prop TN']   * df_main['LBRT BASIN'].map(final_handle)
-    df_main['Unalloc_Chem']   = df_main['Chem Cost'] * df_main['LBRT BASIN'].map(final_chem)
-    df_main['Unalloc_Daily']  = df_main['pad_days']  * df_main['LBRT BASIN'].map(final_daily)
+    # ╔════════ STEP 4 ═══════════════════════════════════════════════════╗
+    # Allocate per-pad
+    df_out = df_main.copy()
+    df_out["Unalloc_Sand"]   = df_out["Prop TN"]   * df_out["LBRT BASIN"].map(final_sand)
+    df_out["Unalloc_Handle"] = df_out["Prop TN"]   * df_out["LBRT BASIN"].map(final_handle)
+    df_out["Unalloc_Chem"]   = df_out["Chem Cost"] * df_out["LBRT BASIN"].map(final_chem)
+    df_out["Unalloc_Daily"]  = df_out["pad_days"]  * df_out["LBRT BASIN"].map(final_daily)
 
-    #----- write to new sheet --------------------------------------------------------------------------
-    if 'Unalloc_Distribution' in wb.sheetnames:
-        del wb['Unalloc_Distribution']
-    ws = wb.create_sheet('Unalloc_Distribution')
+    _dbg(df_out.head(), "STEP 4 ► PAD-LEVEL ALLOCATIONS (first rows)")
 
-    # write summary
-    for r_idx, row in enumerate(df_summary.itertuples(index=False), start=1):
-        for c_idx, val in enumerate(row, start=1):
-            cell = ws.cell(r_idx, c_idx, val)
-            # formatting totals row bold
-            if row.Basin == 'TOTAL':
-                cell.font = Font(bold=True)
-            # currency columns
-            if c_idx in (2,3,5,7,9,10):
-                cell.number_format = CURRENCY_FMT
-            # non-currency numeric
-            if c_idx == 11:
-                cell.number_format = NUMBER_FMT
+    # ╔════════ WRITE TO EXCEL ═══════════════════════════════════════════╗
+    if "Unalloc_Distribution" in wb.sheetnames:
+        del wb["Unalloc_Distribution"]
+    ws = wb.create_sheet("Unalloc_Distribution")
 
-    # leave a blank row
-    pad_start_row = len(df_summary) + 3
+    def _write_section(title: str, df: pd.DataFrame, start_row: int) -> int:
+        """Write a DF preceded by a bold title, return next free row index."""
+        cell = ws.cell(start_row, 1, title)
+        cell.font = Font(bold=True, size=12)
+        cell.fill = HEADER_FILL
+        start_row += 2
+        for r_idx, row in enumerate(
+                dataframe_to_rows(df, index=False, header=True), start=start_row):
+            for c_idx, value in enumerate(row, start=1):
+                cell = ws.cell(r_idx, c_idx, value)
+                # header row styling
+                if r_idx == start_row:
+                    cell.font = Font(bold=True)
+                    cell.fill = HEADER_FILL
+                # Currency formatting heuristics
+                if isinstance(value, (int,float)) and ("Cost" in df.columns[c_idx-1] or "Unalloc" in df.columns[c_idx-1]):
+                    cell.number_format = CURRENCY_FMT
+        return r_idx + 2   # blank row after table
 
-    # write pad-level header
-    for c_idx, header in enumerate(df_main.columns.tolist(), start=1):
-        cell = ws.cell(pad_start_row, c_idx, header)
-        cell.font = Font(bold=True)
+    row = 1
+    row = _write_section("RAW – P. VM Unalloc",      df_unalloc_raw, row)
+    row = _write_section("RAW – P. VM Adjustments",  df_adjust_raw,  row)
+    row = _write_section("RAW – P. VM Current",      df_current_raw, row)
+    row = _write_section("RAW – Main_Combo",         df_main_raw,    row)
+    row = _write_section("STEP 1 – Numerator Combined", df_num,      row)
+    row = _write_section("STEP 2 – Denominator Metrics", df_den,     row)
+    row = _write_section("STEP 3-a – Orphan Costs",      df_orphans, row)
+    row = _write_section("STEP 3-b – Orphan Ratios",     df_orphan_ratio, row)
+    row = _write_section("STEP 3-c – Final Basin Ratios", df_ratios,  row)
+    _ = _write_section("STEP 4 – Pad-level Allocations", df_out, row)
 
-    # write pad-level data
-    for r_off, row in enumerate(df_main.itertuples(index=False), start=1):
-        for c_idx, val in enumerate(row, start=1):
-            cell = ws.cell(pad_start_row + r_off, c_idx, val)
-            # format pad_days
-            if df_main.columns[c_idx-1]=='pad_days':
-                cell.number_format = NUMBER_FMT
-                cell.alignment = Alignment(horizontal='right')
-            # distribution cols get gray fill + currency
-            if df_main.columns[c_idx-1].startswith('Unalloc_'):
-                cell.fill = LIGHT_GRAY
-                cell.number_format = CURRENCY_FMT
-
-    #----- save workbook --------------------------------------------------------------------------------
     wb.save(workbook_path)
+    print(f"[INFO] ✔ Unalloc_Distribution sheet written & workbook saved\n")
+
+# ── CLI helper ────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    if len(sys.argv) != 4:
+        print("Usage: python -m modules.unalloc_distribution "
+              "<workbook_path> <YYYY-MM-DD start> <YYYY-MM-DD end>")
+        sys.exit(1)
+    run_unalloc_distribution(
+        sys.argv[1],
+        datetime.date.fromisoformat(sys.argv[2]),
+        datetime.date.fromisoformat(sys.argv[3])
+    )
