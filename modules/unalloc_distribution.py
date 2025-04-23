@@ -235,7 +235,8 @@ def run_unalloc_distribution(workbook_path: str, month_start: datetime.date, mon
                                       totals['DayTotal'],
                                       '']
 
-    #----- compute pad-level distributions -----------------------------------------------------------
+    #----- compute pad-level distributions -------------------------------------------------------------
+    df_main = df_main.copy()
     df_main['Unalloc_Sand']   = df_main['Prop TN']   * df_main['LBRT BASIN'].map(final_sand)
     df_main['Unalloc_Handle'] = df_main['Prop TN']   * df_main['LBRT BASIN'].map(final_handle)
     df_main['Unalloc_Chem']   = df_main['Chem Cost'] * df_main['LBRT BASIN'].map(final_chem)
