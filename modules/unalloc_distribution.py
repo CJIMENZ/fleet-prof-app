@@ -77,24 +77,19 @@ def run_unalloc_distribution(workbook_path: str, month_start: datetime.date, mon
     print(f"[DEBUG] df_current: shape={df_current.shape}", flush=True)
     print(f"[DEBUG] df_current cols: {df_current.columns.tolist()}", flush=True)
 
-    # strip whitespace on all P.VM headers
-    for df in (df_unalloc, df_adjust, df_current):
-        df.columns = [c.strip() for c in df.columns]
-
-    # rename to the names our logic expects
-    rename_map: Dict[str,str] = {
-        'ENG BASIN R1':             'LBRT BASIN',
-        'Prop Cost':                'Prop Cost',
-        'Truck Cost':               'Truck Cost',
-        'Chemical and Gel cost':    'Chem Cost',
-        'Fuel Cost':                'Fuel Cost',
+    #──────────────────────── header normalisation ────────────────────────
+    rename_map = {
+        'ENG BASIN R1':              'LBRT BASIN',
+        'Chemical and Gel cost':     'Chem Cost',
         'Mat and Containment Costs': 'Mat Cost',
-        'Other Pad Costs':          'Other Pad Cost',
-        'Allocation VM':            'Alloc VM Cost',
-        'Project Number':           'Project Number'
+        'Other Pad Costs':           'Other Pad Cost',
+        'Allocation VM':             'Alloc VM Cost',
     }
-    for df in (df_unalloc, df_adjust, df_current):
-        df.rename(columns=lambda c: rename_map.get(c, c), inplace=True)
+    for _df in (df_unalloc, df_adjust, df_current):
+        _df.columns = [str(c).strip() for c in _df.columns]   # trim whitespace
+        _df.rename(columns=rename_map, inplace=True)
+
+    print(f"[DEBUG] df_current columns AFTER rename: {df_current.columns.tolist()}", flush=True)
 
     # filter only blank or non-6-digit project numbers
     mask = ~df_unalloc['Project Number'].astype(str).str.match(r'^\d{6}$')
@@ -120,12 +115,44 @@ def run_unalloc_distribution(workbook_path: str, month_start: datetime.date, mon
     #----- aggregate denominators by basin ------------------------------------------------------------
     grp_m      = df_main.groupby('LBRT BASIN')
     prop_total = grp_m['Prop TN'].sum()
-    # chemical denominator from the current sheet
-    chem_total = df_current.groupby('LBRT BASIN')['Chem Cost'].sum()
     day_total  = grp_m['pad_days'].sum()
-    print(f"[DEBUG] prop_total shape={prop_total.shape}, basins={list(prop_total.index)}", flush=True)
-    print(f"[DEBUG] chem_total shape={chem_total.shape}, basins={list(chem_total.index)}", flush=True)
-    print(f"[DEBUG] day_total shape={day_total.shape}", flush=True)
+    chem_total = df_current.groupby('LBRT BASIN')['Chem Cost'].sum()
+
+    #─────────────────────────────────────────────────────────────────────────
+    # 🔑  ALIGN **all** numerator & denominator Series to one master index
+    #─────────────────────────────────────────────────────────────────────────
+    basin_union = (
+        sand_unalloc.index
+        .union(handle_unalloc.index)
+        .union(daily_unalloc.index)
+        .union(chem_unalloc.index)
+        .union(prop_total.index)
+        .union(day_total.index)
+        .union(chem_total.index)
+    )
+
+    def _fx(s):  # helper: reindex & fill NaN with 0
+        return s.reindex(basin_union, fill_value=0)
+
+    sand_unalloc   = _fx(sand_unalloc)
+    handle_unalloc = _fx(handle_unalloc)
+    daily_unalloc  = _fx(daily_unalloc)
+    chem_unalloc   = _fx(chem_unalloc)
+
+    prop_total = _fx(prop_total)
+    day_total  = _fx(day_total)
+    chem_total = _fx(chem_total)
+
+    print("[DEBUG] aligned shapes →", 
+          {k: v.shape for k, v in {
+              'sand_unalloc': sand_unalloc,
+              'handle_unalloc': handle_unalloc,
+              'daily_unalloc': daily_unalloc,
+              'chem_unalloc': chem_unalloc,
+              'prop_total': prop_total,
+              'day_total': day_total,
+              'chem_total': chem_total
+          }.items()}, flush=True)
 
     # helper / safe ratio
     def compute_ratio(unalloc, denom):
