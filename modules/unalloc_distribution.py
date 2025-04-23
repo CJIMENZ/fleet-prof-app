@@ -1,6 +1,8 @@
 # modules/unalloc_distribution.py
 
 import datetime
+from typing import List, Dict
+
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
@@ -14,54 +16,116 @@ NUMBER_FMT   = '#,##0.00'
 
 def run_unalloc_distribution(workbook_path: str, month_start: datetime.date, month_end: datetime.date):
     """
-    Read P.VM sheets and Database/Main_Combo, compute unallocated cost distributions
-    and write a new "Unalloc_Distribution" sheet with summary + pad-level results.
+    Read P.VM sheets (even if hidden/dashed) and Database/Main_Combo,
+    compute unallocated cost distributions, and write "Unalloc_Distribution" sheet.
     """
-    #----- load workbook --------------------------------------------------------------------------------
-    wb = load_workbook(workbook_path)
-    #----------------------------------------------------------------------------------------------------
+    import sys, traceback
+    print(f"[DEBUG] ▶ Starting unalloc distribution for {workbook_path}", flush=True)
+    print(f"[DEBUG]    month_start={month_start}, month_end={month_end}", flush=True)
+
+    #----- load workbook with values (even if sheet is hidden) ------------------------------------
+    wb = load_workbook(workbook_path, data_only=True)
+    print(f"[DEBUG]    loaded sheets: {wb.sheetnames}", flush=True)
+
+    #----- helper: locate sheet by keywords (case-insensitive) ------------------------------------
+    def find_sheet(keywords: List[str]) -> str:
+        for name in wb.sheetnames:
+            lname = name.lower()
+            if all(k.lower() in lname for k in keywords):
+                return name
+        raise KeyError(f"No sheet matching keywords {keywords}")
+
+    #----- helper: sheet -> DataFrame ---------------------------------------------------------------
+    def sheet_to_df(ws) -> pd.DataFrame:
+        it = ws.values
+        hdr = next(it)
+        cols = [str(h).strip() for h in hdr]
+        return pd.DataFrame(it, columns=cols)
 
     #----- read Main_Combo from "Database" sheet -------------------------------------------------------
     df_main = pd.read_excel(
         workbook_path,
         sheet_name='Database',
-        header=1,             # assume headers on row 2
-        usecols='A:P',        # cols 1–16
+        header=1,
+        usecols='A:P',
         engine='openpyxl'
-    ).dropna(how='all', subset=['Pad No'])  # keep only real pads
+    ).dropna(how='all', subset=['Pad No'])
+    print(f"[DEBUG] df_main: shape={df_main.shape}", flush=True)
+    print(f"[DEBUG] df_main columns: {df_main.columns.tolist()}", flush=True)
 
-    # compute pad_days
+    # normalize Main_Combo headers
+    df_main.columns = [c.strip() for c in df_main.columns]
+    df_main.rename(columns={'PAD START': 'Pad Start', 'PAD END': 'Pad End'}, inplace=True)
+
+    # compute pad_days (clamp into month window)
     df_main['Pad Start'] = pd.to_datetime(df_main['Pad Start'])
     df_main['Pad End']   = pd.to_datetime(df_main['Pad End'])
+    ms = pd.Timestamp(month_start)
+    me = pd.Timestamp(month_end)
     df_main['pad_days'] = (
-        (df_main[['Pad End', pd.Timestamp(month_end)]].min(axis=1)
-         - df_main[['Pad Start', pd.Timestamp(month_start)]].max(axis=1))
-        .dt.days.clip(lower=0)
-    )
+        df_main['Pad End'].clip(upper=me)
+        - df_main['Pad Start'].clip(lower=ms)
+    ).dt.days.clip(lower=0)
+    print(f"[DEBUG] pad_days range: min={df_main['pad_days'].min()}, max={df_main['pad_days'].max()}", flush=True)
 
-    #----- read P.VM sheets --------------------------------------------------------------------------
-    df_unalloc = pd.read_excel(workbook_path, sheet_name='P. VM – Unalloc', engine='openpyxl')
-    df_adjust  = pd.read_excel(workbook_path, sheet_name='P. VM – Adjustments', engine='openpyxl')
-    df_current = pd.read_excel(workbook_path, sheet_name='P. VM – Current', engine='openpyxl')
+    #----- read & normalize P.VM sheets ---------------------------------------------------------------
+    df_unalloc = sheet_to_df(wb[find_sheet(['p. vm', 'unalloc'])])
+    df_adjust  = sheet_to_df(wb[find_sheet(['p. vm', 'adjustments'])])
+    df_current = sheet_to_df(wb[find_sheet(['p. vm', 'current'])])
+    print(f"[DEBUG] df_unalloc: shape={df_unalloc.shape}", flush=True)
+    print(f"[DEBUG] df_unalloc cols: {df_unalloc.columns.tolist()}", flush=True)
+    print(f"[DEBUG] df_current: shape={df_current.shape}", flush=True)
+    print(f"[DEBUG] df_current cols: {df_current.columns.tolist()}", flush=True)
+
+    # strip whitespace on all P.VM headers
+    for df in (df_unalloc, df_adjust, df_current):
+        df.columns = [c.strip() for c in df.columns]
+
+    # rename to the names our logic expects
+    rename_map: Dict[str,str] = {
+        'ENG BASIN R1':             'LBRT BASIN',
+        'Prop Cost':                'Prop Cost',
+        'Truck Cost':               'Truck Cost',
+        'Chemical and Gel cost':    'Chem Cost',
+        'Fuel Cost':                'Fuel Cost',
+        'Mat and Containment Costs': 'Mat Cost',
+        'Other Pad Costs':          'Other Pad Cost',
+        'Allocation VM':            'Alloc VM Cost',
+        'Project Number':           'Project Number'
+    }
+    for df in (df_unalloc, df_adjust, df_current):
+        df.rename(columns=lambda c: rename_map.get(c, c), inplace=True)
 
     # filter only blank or non-6-digit project numbers
     mask = ~df_unalloc['Project Number'].astype(str).str.match(r'^\d{6}$')
     df_unalloc = df_unalloc.loc[mask]
     df_adjust  = df_adjust.loc[mask]
 
-    #----- aggregate unalloc by basin -----------------------------------------------------------------
+    #----- aggregate unalloc by basin ---------------------------------------------------------------
+    print("[DEBUG] grouping df_unalloc by 'LBRT BASIN' …", flush=True)
     grp_u = df_unalloc.groupby('LBRT BASIN')
     sand_unalloc   = grp_u['Prop Cost'].sum()
+    print(f"[DEBUG] sand_unalloc: shape={sand_unalloc.shape}, basins={sand_unalloc.index.tolist()}", flush=True)
     handle_unalloc = grp_u['Truck Cost'].sum()
-    daily_unalloc  = grp_u[['Fuel Cost','Mat Cost','Other Pad Cost','Alloc VM Cost']].sum(axis=1).groupby(df_unalloc['LBRT BASIN']).sum()
+    print(f"[DEBUG] handle_unalloc: shape={handle_unalloc.shape}, basins={handle_unalloc.index.tolist()}", flush=True)
+
+    print("[DEBUG] computing daily_unalloc …", flush=True)
+    daily_vals = df_unalloc[['Fuel Cost','Mat Cost','Other Pad Cost','Alloc VM Cost']]
+    print(f"[DEBUG]   daily_vals sample:\n{daily_vals.head()}", flush=True)
+    row_daily = daily_vals.sum(axis=1)
+    print(f"[DEBUG]   row_daily sample:\n{row_daily.head()}", flush=True)
+    daily_unalloc = row_daily.groupby(df_unalloc['LBRT BASIN']).sum()
+    print(f"[DEBUG] daily_unalloc: shape={daily_unalloc.shape}, basins={daily_unalloc.index.tolist()}", flush=True)
 
     chem_unalloc = df_current.groupby('LBRT BASIN')['Chem Cost'].sum()
+    print(f"[DEBUG] chem_unalloc: shape={chem_unalloc.shape}, basins={chem_unalloc.index.tolist()}", flush=True)
 
     #----- aggregate denominators by basin ------------------------------------------------------------
-    grp_m = df_main.groupby('LBRT BASIN')
-    prop_total = grp_m['Prop TN'].sum()
-    chem_total = grp_m['Chem Cost'].sum()
-    day_total  = grp_m['pad_days'].sum()
+    grp_m     = df_main.groupby('LBRT BASIN')
+    prop_total= grp_m['Prop TN'].sum()
+    day_total = grp_m['pad_days'].sum()
+    # denominator for chemical must come from P.VM – Current as well
+    chem_total = df_current.groupby('LBRT BASIN')['Chem Cost'].sum()
 
     # helper / safe ratio
     def compute_ratio(unalloc, denom):
