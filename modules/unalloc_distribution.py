@@ -110,9 +110,7 @@ def run_unalloc_distribution(workbook_path: str, month_start: datetime.date, mon
     print(f"[DEBUG] daily_unalloc shape={daily_unalloc.shape}, basins={list(daily_unalloc.index)}", flush=True)
 
     chem_unalloc = df_current.groupby('LBRT BASIN')['Chem Cost'].sum()
-    print(f"[DEBUG] chem_unalloc shape={chem_unalloc.shape}, basins={list(chem_unalloc.index)}", flush=True)
 
-    #----- aggregate denominators by basin ------------------------------------------------------------
     grp_m      = df_main.groupby('LBRT BASIN')
     prop_total = grp_m['Prop TN'].sum()
     day_total  = grp_m['pad_days'].sum()
@@ -154,15 +152,23 @@ def run_unalloc_distribution(workbook_path: str, month_start: datetime.date, mon
               'chem_total': chem_total
           }.items()}, flush=True)
 
-    # helper / safe ratio
+    #───────────────────────────────────────────────────────────────────────
+    # 🔄  Inject per-pad Chem Cost from P. VM – Current
+    #───────────────────────────────────────────────────────────────────────
+    chem_by_pad = df_current.groupby('Project Number')['Chem Cost'].sum()
+    df_main['Chem Cost'] = df_main['Pad No'].map(chem_by_pad).fillna(0)
+    print("[DEBUG] mapped Chem Cost onto df_main; non-zero pads:",
+          (df_main['Chem Cost'] > 0).sum(), flush=True)
+
+    # helper / safe ratio  (run *after* alignment)
     def compute_ratio(unalloc, denom):
         r = unalloc.div(denom).replace([pd.NA, pd.NaT, float('inf')], 0)
         return r.fillna(0)
 
-    ratio_sand   = compute_ratio(sand_unalloc, prop_total)
+    ratio_sand   = compute_ratio(sand_unalloc,   prop_total)
     ratio_handle = compute_ratio(handle_unalloc, prop_total)
-    ratio_chem   = compute_ratio(chem_unalloc, chem_total)
-    ratio_daily  = compute_ratio(daily_unalloc, day_total)
+    ratio_chem   = compute_ratio(chem_unalloc,   chem_total)
+    ratio_daily  = compute_ratio(daily_unalloc,  day_total)
 
     #----- sprinkle zero-activity basins ----------------------------------------------------------------
     def sprinkle(ratio, unalloc, denom):
@@ -229,8 +235,7 @@ def run_unalloc_distribution(workbook_path: str, month_start: datetime.date, mon
                                       totals['DayTotal'],
                                       '']
 
-    #----- compute pad-level distributions -------------------------------------------------------------
-    df_main = df_main.copy()
+    #----- compute pad-level distributions -----------------------------------------------------------
     df_main['Unalloc_Sand']   = df_main['Prop TN']   * df_main['LBRT BASIN'].map(final_sand)
     df_main['Unalloc_Handle'] = df_main['Prop TN']   * df_main['LBRT BASIN'].map(final_handle)
     df_main['Unalloc_Chem']   = df_main['Chem Cost'] * df_main['LBRT BASIN'].map(final_chem)
