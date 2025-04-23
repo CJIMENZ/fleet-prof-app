@@ -101,31 +101,31 @@ def run_unalloc_distribution(workbook_path: str, month_start: datetime.date, mon
     df_unalloc = df_unalloc.loc[mask]
     df_adjust  = df_adjust.loc[mask]
 
-    #----- aggregate unalloc by basin ---------------------------------------------------------------
-    print("[DEBUG] grouping df_unalloc by 'LBRT BASIN' …", flush=True)
+    #----- aggregate unalloc by basin -----------------------------------------------------------------
     grp_u = df_unalloc.groupby('LBRT BASIN')
     sand_unalloc   = grp_u['Prop Cost'].sum()
-    print(f"[DEBUG] sand_unalloc: shape={sand_unalloc.shape}, basins={sand_unalloc.index.tolist()}", flush=True)
     handle_unalloc = grp_u['Truck Cost'].sum()
-    print(f"[DEBUG] handle_unalloc: shape={handle_unalloc.shape}, basins={handle_unalloc.index.tolist()}", flush=True)
+    # debug: show unalloc shapes and basin list
+    print(f"[DEBUG] sand_unalloc  shape={sand_unalloc.shape}, basins={list(sand_unalloc.index)}", flush=True)
+    print(f"[DEBUG] handle_unalloc shape={handle_unalloc.shape}, basins={list(handle_unalloc.index)}", flush=True)
 
-    print("[DEBUG] computing daily_unalloc …", flush=True)
-    daily_vals = df_unalloc[['Fuel Cost','Mat Cost','Other Pad Cost','Alloc VM Cost']]
-    print(f"[DEBUG]   daily_vals sample:\n{daily_vals.head()}", flush=True)
-    row_daily = daily_vals.sum(axis=1)
-    print(f"[DEBUG]   row_daily sample:\n{row_daily.head()}", flush=True)
+    # sum the four daily-cost columns per pad then basin-sum
+    row_daily     = df_unalloc[['Fuel Cost','Mat Cost','Other Pad Cost','Alloc VM Cost']].sum(axis=1)
     daily_unalloc = row_daily.groupby(df_unalloc['LBRT BASIN']).sum()
-    print(f"[DEBUG] daily_unalloc: shape={daily_unalloc.shape}, basins={daily_unalloc.index.tolist()}", flush=True)
+    print(f"[DEBUG] daily_unalloc shape={daily_unalloc.shape}, basins={list(daily_unalloc.index)}", flush=True)
 
     chem_unalloc = df_current.groupby('LBRT BASIN')['Chem Cost'].sum()
-    print(f"[DEBUG] chem_unalloc: shape={chem_unalloc.shape}, basins={chem_unalloc.index.tolist()}", flush=True)
+    print(f"[DEBUG] chem_unalloc shape={chem_unalloc.shape}, basins={list(chem_unalloc.index)}", flush=True)
 
     #----- aggregate denominators by basin ------------------------------------------------------------
-    grp_m     = df_main.groupby('LBRT BASIN')
-    prop_total= grp_m['Prop TN'].sum()
-    day_total = grp_m['pad_days'].sum()
-    # denominator for chemical must come from P.VM – Current as well
+    grp_m      = df_main.groupby('LBRT BASIN')
+    prop_total = grp_m['Prop TN'].sum()
+    # chemical denominator from the current sheet
     chem_total = df_current.groupby('LBRT BASIN')['Chem Cost'].sum()
+    day_total  = grp_m['pad_days'].sum()
+    print(f"[DEBUG] prop_total shape={prop_total.shape}, basins={list(prop_total.index)}", flush=True)
+    print(f"[DEBUG] chem_total shape={chem_total.shape}, basins={list(chem_total.index)}", flush=True)
+    print(f"[DEBUG] day_total shape={day_total.shape}", flush=True)
 
     # helper / safe ratio
     def compute_ratio(unalloc, denom):
@@ -153,20 +153,41 @@ def run_unalloc_distribution(workbook_path: str, month_start: datetime.date, mon
     final_chem   = sprinkle(ratio_chem,   chem_unalloc,   chem_total)
     final_daily  = sprinkle(ratio_daily,  daily_unalloc,  day_total)
 
+    #----- DEBUG: shapes of final series before alignment ------------------------------------------------
+    print(f"[DEBUG] final_sand:   shape={final_sand.shape}, index={list(final_sand.index)}", flush=True)
+    print(f"[DEBUG] final_handle: shape={final_handle.shape}, index={list(final_handle.index)}", flush=True)
+    print(f"[DEBUG] final_chem:   shape={final_chem.shape}, index={list(final_chem.index)}", flush=True)
+    print(f"[DEBUG] final_daily:  shape={final_daily.shape}, index={list(final_daily.index)}", flush=True)
+
+    #----- ALIGN all numerator & ratio series to the same basin list -----------------------------------
+    basin_index = prop_total.index
+    sand_unalloc   = sand_unalloc.reindex(basin_index, fill_value=0)
+    handle_unalloc = handle_unalloc.reindex(basin_index, fill_value=0)
+    chem_unalloc   = chem_unalloc.reindex(basin_index, fill_value=0)
+    daily_unalloc  = daily_unalloc.reindex(basin_index, fill_value=0)
+    final_sand     = final_sand.reindex(basin_index,   fill_value=0)
+    final_handle   = final_handle.reindex(basin_index, fill_value=0)
+    final_chem     = final_chem.reindex(basin_index,   fill_value=0)
+    final_daily    = final_daily.reindex(basin_index,  fill_value=0)
+    print(f"[DEBUG] AFTER reindex all shapes: sand={sand_unalloc.shape}, handle={handle_unalloc.shape}, chem={chem_unalloc.shape}, daily={daily_unalloc.shape}", flush=True)
+    print(f"[DEBUG] RATIOS reindexed: sand={final_sand.shape}, handle={final_handle.shape}, chem={final_chem.shape}, daily={final_daily.shape}", flush=True)
+
+    # now every series has length = len(basin_index) = 9
     #----- build summary DataFrame --------------------------------------------------------------------
     df_summary = pd.DataFrame({
-        'Basin': prop_total.index,
-        'SandUnalloc': sand_unalloc,
-        'PropTotal':   prop_total,
-        'RatioSand':   final_sand,
+        'Basin':         basin_index,
+        'SandUnalloc':   sand_unalloc,
+        'PropTotal':     prop_total,
+        'RatioSand':     final_sand,
         'HandleUnalloc': handle_unalloc,
-        'RatioHandle':  final_handle,
-        'ChemUnalloc': chem_unalloc,
-        'RatioChem':    final_chem,
-        'DailyUnalloc': daily_unalloc,
-        'DayTotal':     day_total,
-        'RatioDaily':   final_daily,
+        'RatioHandle':   final_handle,
+        'ChemUnalloc':   chem_unalloc,
+        'RatioChem':     final_chem,
+        'DailyUnalloc':  daily_unalloc,
+        'DayTotal':      day_total,
+        'RatioDaily':    final_daily,
     }).fillna(0).reset_index(drop=True)
+
     # add totals row
     totals = df_summary[['SandUnalloc','PropTotal','HandleUnalloc','ChemUnalloc','DailyUnalloc','DayTotal']].sum()
     df_summary.loc[len(df_summary)] = ['TOTAL',
