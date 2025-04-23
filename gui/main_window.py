@@ -19,6 +19,7 @@ from modules.view_download_operations import download_all_views
 from modules.report_generation        import build_monthly_database
 from modules.pnl_pivot_operations     import generate_pnl_pivot           # NEW
 from modules.project_vm_adjustment    import generate_project_vm_adj      # NEW
+from modules.unalloc_distribution     import run_unalloc_distribution
 
 class MainWindow(ttk.Window):
     def __init__(self, config_parser):
@@ -120,6 +121,12 @@ class MainWindow(ttk.Window):
         row += 1
         ttk.Button(frame, text="Generate Project VM Adj", bootstyle="secondary",
                    command=self.on_generate_project_vm_adj)\
+            .grid(row=row, column=0, columnspan=3, pady=(5,10))
+
+        # NEW: Create Unallocated Distributions
+        row += 1
+        ttk.Button(frame, text="Create Unallocated Distributions", bootstyle="secondary",
+                   command=self.on_create_unalloc_distributions)\
             .grid(row=row, column=0, columnspan=3, pady=(5,10))
 
     # Browse handlers
@@ -236,15 +243,78 @@ class MainWindow(ttk.Window):
 
     # NEW: Generate Project VM Adjustment sheet
     def on_generate_project_vm_adj(self):
-        file = fd.askopenfilename(title="Select MonthDataFile.xlsx",
-                                   filetypes=[("Excel files","*.xlsx *.xls"),("All files","*.*")])
-        if not file: return
         try:
-            generate_project_vm_adj(file)
-            mb.showinfo("Done", "Project VM Adj sheet created.")
+            generate_project_vm_adj()
+            mb.showinfo("Success", "Project VM adjustment sheet generated successfully.")
         except Exception as e:
-            logging.error(e)
-            mb.showerror("Error", str(e))
+            mb.showerror("Error", f"Failed to generate project VM adjustment sheet:\n{str(e)}")
+
+    def on_create_unalloc_distributions(self):
+        """Create unallocated distributions for the current workbook."""
+        # Helper to shift a date by ±n months
+        def shift_month(d: datetime.date, delta: int) -> datetime.date:
+            y = d.year + ((d.month - 1 + delta) // 12)
+            m = ((d.month - 1 + delta) % 12) + 1
+            return d.replace(year=y, month=m, day=1)
+
+        # Build a list of the last 12 months (labels like 'Mar-25')
+        today = datetime.date.today()
+        prev_end = today.replace(day=1) - datetime.timedelta(days=1)
+        prev_start = prev_end.replace(day=1)
+        months = [shift_month(prev_start, -i) for i in range(12)]
+        labels = [d.strftime('%b-%y') for d in months]
+
+        # Create pop-up dialog
+        dlg = ttk.Toplevel(self)
+        dlg.title("Select Report Month")
+        dlg.transient(self)
+        dlg.grab_set()
+
+        # Add content to dialog
+        ttk.Label(dlg, text="Report Month:", bootstyle="secondary")\
+            .pack(padx=10, pady=(10, 0))
+        
+        sel_var = ttk.StringVar(value=labels[0])
+        combo = ttk.Combobox(dlg, values=labels, textvariable=sel_var, state="readonly", width=10)
+        combo.pack(padx=10, pady=5)
+
+        btn_frame = ttk.Frame(dlg)
+        btn_frame.pack(pady=(0,10))
+
+        def _ok():
+            dlg.selected = sel_var.get()
+            dlg.destroy()
+
+        ttk.Button(btn_frame, text="OK", command=_ok, bootstyle="primary")\
+            .pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Cancel", command=dlg.destroy, bootstyle="secondary")\
+            .pack(side="left", padx=5)
+
+        self.wait_window(dlg)
+        sel = getattr(dlg, 'selected', None)
+        if not sel:
+            return  # User cancelled
+
+        # Parse 'Mon-YY' into start/end dates
+        dt = datetime.datetime.strptime(sel, '%b-%y')
+        month_start = dt.date().replace(day=1)
+        next_month = shift_month(month_start, 1)
+        month_end = next_month - datetime.timedelta(days=1)
+
+        # Get the workbook path
+        wb_path = fd.askopenfilename(
+            title="Select Workbook",
+            filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
+        )
+        if not wb_path:
+            return  # User cancelled
+
+        # Call the distribution routine
+        try:
+            run_unalloc_distribution(wb_path, month_start, month_end)
+            mb.showinfo("Success", "Unallocated distributions created successfully.")
+        except Exception as e:
+            mb.showerror("Error", f"Failed to create unallocated distributions:\n{str(e)}")
 
     def open_settings_dialog(self):
         dlg = SettingsDialog(self, self.config_parser)
