@@ -196,21 +196,24 @@ def run_unalloc_distribution(
     sheet_unalloc  = _find_sheet_name(wb, ["p. vm", "unalloc"])
     sheet_current  = _find_sheet_name(wb, ["p. vm", "current"])
     sheet_adj      = _find_sheet_name(wb, ["p. vm", "adjust"])
+    sheet_unass    = _find_sheet_name(wb, ["p. vm", "unass"])
 
     df_unalloc_raw = _read_pvm_body(workbook_path, sheet_unalloc)
     df_current_raw = _read_pvm_body(workbook_path, sheet_current)
     df_adjust_raw  = _read_pvm_adjustments(workbook_path, sheet_adj)
+    df_unass_raw   = _read_pvm_body(workbook_path, sheet_unass)
     df_main_raw    = _read_main_combo(workbook_path)
 
     # ---- print raw pulls -------------------------------------------------
     _dbg(df_unalloc_raw, "P. VM – Unalloc  (raw)")
     _dbg(df_adjust_raw,  "P. VM – Adjustments (raw)")
+    _dbg(df_unass_raw,   "P. VM – Unass (raw)")
     _dbg(df_current_raw, "P. VM – Current  (raw)")
     _dbg(df_main_raw,    "Main_Combo (raw)")
 
     # ╔════════ STEP 1 ═══════════════════════════════════════════════════╗
     # Combine unallocated lines  (numerator)
-    def _step1_build_combined(df_unalloc, df_adjust) -> pd.DataFrame:
+    def _step1_build_combined(df_unalloc, df_adjust, df_unass) -> pd.DataFrame:
         """
         Concatenate **only** P. VM – Unalloc and the true-unalloc rows from
         P. VM – Adjustments, align headers, drop Project Number,
@@ -218,7 +221,7 @@ def run_unalloc_distribution(
         """
         # 1) Normalise column names -------------------------------------------------
         dfs = []
-        for df in (df_unalloc, df_adjust):
+        for df in (df_unalloc, df_adjust, df_unass):
             if "ENG BASIN R1" in df.columns:
                 df = df.rename(columns={"ENG BASIN R1": "LBRT BASIN"})
             dfs.append(_standardise_cost_columns(df))
@@ -244,7 +247,7 @@ def run_unalloc_distribution(
 
         return combined
 
-    df_num = _step1_build_combined(df_unalloc_raw, df_adjust_raw)
+    df_num = _step1_build_combined(df_unalloc_raw, df_adjust_raw, df_unass_raw)
 
     # ╔════════ STEP 2 ═══════════════════════════════════════════════════╗
     # Build denominator metrics
@@ -386,6 +389,7 @@ def run_unalloc_distribution(
     row = 1
     row = _write_section("RAW – P. VM Unalloc",      df_unalloc_raw, row)
     row = _write_section("RAW – P. VM Adjustments",  df_adjust_raw,  row)
+    row = _write_section("RAW – P. VM Unass",        df_unass_raw,   row)
     row = _write_section("RAW – P. VM Current",      df_current_raw, row)
     row = _write_section("RAW – Main_Combo",         df_main_raw,    row)
     row = _write_section("STEP 1 – Numerator Combined", df_num,      row)
