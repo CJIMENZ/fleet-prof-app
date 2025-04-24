@@ -4,13 +4,13 @@
 Distribute unallocated Sand, Handling, Chemical, and Daily costs
 ----------------------------------------------------------------
 Steps
-1.  Pull *unallocated* lines from “P. VM - Unalloc” **and** the
-    non-6-digit rows (the true unalloc-txn lines) in “P. VM - Adjustments”.
+1.  Pull *unallocated* lines from "P. VM - Unalloc" **and** the
+    non-6-digit rows (the true unalloc-txn lines) in "P. VM - Adjustments".
     ➜  Combined DF = NUMERATOR   (printed & written)
 2.  Pull activity metrics from Database/Main-Combo + Chem Cost totals
-    from “P. VM - Current” (only projects that exist in Main-Combo).
+    from "P. VM - Current" (only projects that exist in Main-Combo).
     ➜  Basin-level METRICS table = DENOMINATOR (printed & written)
-3.  Build allocation ratios per basin, detect “orphans” where the
+3.  Build allocation ratios per basin, detect "orphans" where the
     denominator is 0, sprinkle those across active basins (≠ CA),
     and print three debug tables:
         3-a  orphan costs
@@ -27,11 +27,14 @@ from __future__ import annotations
 import datetime, re, sys, traceback
 from pathlib import Path
 from typing import List, Dict
+import logging
 
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font, Alignment
 from openpyxl.utils.dataframe import dataframe_to_rows
+
+logger = logging.getLogger(__name__)
 
 # ── Formatting ─────────────────────────────────────────────────────────────
 LIGHT_GRAY   = PatternFill(fill_type="solid", fgColor="DDDDDD")
@@ -46,9 +49,26 @@ RENAME_MAP = {
     'Mat and Containment Costs': 'Mat Cost',
     'Other Pad Costs':           'Other Pad Cost',
     'Allocation VM':             'Alloc VM Cost',
-    # sometimes Current sheet header shows “Chemical cost”
+    # sometimes Current sheet header shows "Chemical cost"
     'Chemical cost':             'Chem Cost',
 }
+
+# map the ALL-CAPS headers coming from Adjustments to the mixed-case
+# equivalents used elsewhere
+_COL_MAP = {
+    "PROP COST": "Prop Cost",
+    "TRUCK COST": "Truck Cost",
+    "CHEM COST": "Chem Cost",
+    "FUEL COST": "Fuel Cost",
+    "MAT COST": "Mat Cost",
+    "OTHER PAD COST": "Other Pad Cost",
+    "ALLOC VM COST": "Alloc VM Cost",
+}
+
+def _standardise_cost_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Rename cost columns to a single convention."""
+    new_cols = {c: _COL_MAP.get(c.strip().upper(), c) for c in df.columns}
+    return df.rename(columns=new_cols)
 
 # ═══════════════════════════════════════════════════════════════════════════
 def _find_sheet_name(wb, keywords: List[str]) -> str:
@@ -63,7 +83,9 @@ def _find_sheet_name(wb, keywords: List[str]) -> str:
 def _read_pvm_body(workbook_path: str, sheet_name: str) -> pd.DataFrame:
     """
     Read any P. VM sheet whose *real* data begin in row 4 (header row 1,
-    grand-total row 2, blank row 3).  Returns a cleaned DataFrame.
+    grand-total row 2, blank row 3). Returns a cleaned DataFrame containing
+    only cost columns (any column whose header contains "rev" or "revenue"
+    is dropped).
     """
     df = pd.read_excel(
         workbook_path,
@@ -73,15 +95,31 @@ def _read_pvm_body(workbook_path: str, sheet_name: str) -> pd.DataFrame:
     )
     df = df.iloc[2:]        # drop GT + blank
     df = df.dropna(how="all")          # strip empty rows at bottom
+    
+    # Keep only columns that are *not* revenue related
+    col_mask = ~df.columns.astype(str).str.contains(r"rev|revenue", case=False, regex=True)
+    df = df.loc[:, col_mask]
+    
+    # Normalize & clean up
     df.columns = [str(c).strip() for c in df.columns]
     df.rename(columns=RENAME_MAP, inplace=True)
+    
+    # Forward-fill merged cells in LBRT BASIN column if it exists
+    if "LBRT BASIN" in df.columns:
+        df["LBRT BASIN"].ffill(inplace=True)
+        
     return df.reset_index(drop=True)
 
 # -------------------------------------------------------------------------- 
 def _read_pvm_adjustments(workbook_path: str, sheet_name: str) -> pd.DataFrame:
     """
-    “P. VM - Adjustments” has summary stuff first; real header is on row 18,
-    data start on row 19.
+    Return a DataFrame containing **only cost columns** from the
+    "P. VM - Adjustments" worksheet.
+
+    All columns whose header matches "rev" or "revenue"
+    (case-insensitive) are removed.  Useful identifiers like
+    "Project Number", "LBRT BASIN", "Period Name", and any *Cost*
+    buckets are retained.
     """
     df = pd.read_excel(
         workbook_path,
@@ -90,9 +128,40 @@ def _read_pvm_adjustments(workbook_path: str, sheet_name: str) -> pd.DataFrame:
         engine="openpyxl"
     )
     df = df.dropna(how="all")
-    df.columns = [str(c).strip() for c in df.columns]
-    df.rename(columns=RENAME_MAP, inplace=True)
-    return df.reset_index(drop=True)
+    
+    # Keep only non-revenue columns
+    mask = ~df.columns.str.contains(r"rev|revenue", case=False, regex=True)
+    df = df.loc[:, mask]
+
+    # Drop Variable / Misc / Comment columns ---------------------------------
+    _DROP = {"VARIABLE COST", "MISC COST", "COMMENT"}
+    df = df.drop(columns=[c for c in df.columns if c.strip().upper() in _DROP],
+                 errors="ignore")
+
+    # Remove rows whose Project Number is a *numeric* 6-digit code -----------
+    if "Project Number" in df.columns:
+        def _is_six_digit(val):
+            if pd.isna(val):
+                return False
+            try:
+                n = int(float(val))
+                return 100000 <= n <= 999999
+            except (ValueError, TypeError):
+                return False
+        
+        df = df[~df["Project Number"].apply(_is_six_digit)]
+    
+    # Tidy up
+    df.columns = df.columns.str.strip()
+    for col in ("LBRT BASIN", "Period Name"):
+        if col in df.columns:
+            df[col] = df[col].ffill()          # avoid chained-assignment warning
+
+    df = df.reset_index(drop=True)
+    
+    logger.debug("P. VM – Adjustments (filtered):\n%s", df)
+    
+    return df
 
 # -------------------------------------------------------------------------- 
 def _read_main_combo(workbook_path: str) -> pd.DataFrame:
@@ -134,10 +203,6 @@ def run_unalloc_distribution(
     df_main_raw    = _read_main_combo(workbook_path)
 
     # ---- print raw pulls -------------------------------------------------
-    def _dbg(df, tag):
-        print(f"[DEBUG] {tag}: shape={df.shape}")
-        print(df.head(6).to_string(index=False), "\n")
-
     _dbg(df_unalloc_raw, "P. VM – Unalloc  (raw)")
     _dbg(df_adjust_raw,  "P. VM – Adjustments (raw)")
     _dbg(df_current_raw, "P. VM – Current  (raw)")
@@ -145,13 +210,41 @@ def run_unalloc_distribution(
 
     # ╔════════ STEP 1 ═══════════════════════════════════════════════════╗
     # Combine unallocated lines  (numerator)
-    non_six = lambda s: ~s.astype(str).str.match(r"^\d{6}$")
+    def _step1_build_combined(df_unalloc, df_adjust) -> pd.DataFrame:
+        """
+        Concatenate **only** P. VM – Unalloc and the true-unalloc rows from
+        P. VM – Adjustments, align headers, drop Project Number,
+        and SUM by basin.
+        """
+        # 1) Normalise column names -------------------------------------------------
+        dfs = []
+        for df in (df_unalloc, df_adjust):
+            if "ENG BASIN R1" in df.columns:
+                df = df.rename(columns={"ENG BASIN R1": "LBRT BASIN"})
+            dfs.append(_standardise_cost_columns(df))
 
-    df_unalloc_num = df_unalloc_raw.copy()                                 # already non-6-digit
-    df_adj_num     = df_adjust_raw.loc[non_six(df_adjust_raw["Project Number"])]
-    df_num = pd.concat([df_unalloc_num, df_adj_num], ignore_index=True)
+        combined = pd.concat(dfs, ignore_index=True, sort=False)
 
-    _dbg(df_num, "STEP 1 ► COMBINED NUMERATOR")
+        # 2) Drop unwanted identifier ----------------------------------------------
+        combined = combined.drop(columns=[c for c in combined.columns
+                                           if c.strip().upper() == "PROJECT NUMBER"],
+                                 errors="ignore")
+
+        # 3) Group & sum by basin ---------------------------------------------------
+        numeric_cols = combined.select_dtypes(include="number").columns
+        combined = (
+            combined
+            .groupby("LBRT BASIN", dropna=False)[numeric_cols]
+            .sum(min_count=1)                 # keep NaN if all NaN for that basin
+            .reset_index()
+        )
+
+        # 4) DEBUG – print full DataFrame ------------------------------------------
+        _dbg(combined, "STEP 1 ► COMBINED NUMERATOR (summed by basin)")
+
+        return combined
+
+    df_num = _step1_build_combined(df_unalloc_raw, df_adjust_raw)
 
     # ╔════════ STEP 2 ═══════════════════════════════════════════════════╗
     # Build denominator metrics
@@ -304,6 +397,18 @@ def run_unalloc_distribution(
 
     wb.save(workbook_path)
     print(f"[INFO] ✔ Unalloc_Distribution sheet written & workbook saved\n")
+
+# ─── Pretty-print full frames ────────────────────────────────────────
+def _dbg(df: pd.DataFrame, tag: str) -> None:
+    """Console dump of *entire* DataFrame (no head truncation)."""
+    with pd.option_context(
+        "display.max_rows", None,
+        "display.max_columns", None,
+        "display.width",     None,        # pandas won't fold columns
+        "display.float_format", "{:,.6g}".format,
+    ):
+        print(f"[DEBUG] {tag}: shape={df.shape}")
+        print(df.to_string(index=False), "\n")
 
 # ── CLI helper ────────────────────────────────────────────────────────────
 if __name__ == "__main__":
