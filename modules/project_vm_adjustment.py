@@ -133,10 +133,11 @@ def _to_number(series: pd.Series) -> pd.Series:
                      .str.replace(r"\((.*)\)", r"-\1", regex=True))
     return pd.to_numeric(cleaned, errors="coerce")
 
-def _safe_load_workbook(path: str):
+def _safe_load_workbook(path: str, backup: bool = False):
     with zipfile.ZipFile(path, "r") as zf:
         zf.testzip()
-    shutil.copy2(path, path.replace(".xlsx", "-backup.xlsx"))
+    if backup:
+        shutil.copy2(path, path.replace(".xlsx", "-backup.xlsx"))
     return load_workbook(path)
 
 def _read_block(ws, first: str, last: str) -> pd.DataFrame:

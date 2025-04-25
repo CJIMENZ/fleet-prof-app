@@ -243,11 +243,22 @@ class MainWindow(ttk.Window):
 
     # NEW: Generate Project VM Adjustment sheet
     def on_generate_project_vm_adj(self):
+        """Prompt for the MonthData workbook and build the Project-VM Adj sheet."""
+
+        file = fd.askopenfilename(
+            title="Select MonthDataFile.xlsx",
+            filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")],
+        )
+        if not file:   # user cancelled
+            return
+
         try:
-            generate_project_vm_adj()
-            mb.showinfo("Success", "Project VM adjustment sheet generated successfully.")
+            generate_project_vm_adj(file)          # ← pass the path argument
+            mb.showinfo("Success", "Project VM adjustment sheet created.")
         except Exception as e:
-            mb.showerror("Error", f"Failed to generate project VM adjustment sheet:\n{str(e)}")
+            logging.error("Project-VM Adj failed: %s", e, exc_info=True)
+            mb.showerror("Error",
+                         f"Failed to generate project VM adjustment sheet:\n{e}")
 
     def on_create_unalloc_distributions(self):
         """Create unallocated distributions for the current workbook."""
