@@ -24,7 +24,8 @@ in the same order, separated by a blank row and a bold section title.
 """
 
 from __future__ import annotations
-import datetime, re, sys, traceback
+import datetime as dt, re, sys, traceback
+from datetime import datetime, date
 from pathlib import Path
 from typing import List, Dict
 import logging
@@ -33,6 +34,7 @@ import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font, Alignment
 from openpyxl.utils.dataframe import dataframe_to_rows
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +67,30 @@ _COL_MAP = {
     "ALLOC VM COST": "Alloc VM Cost",
 }
 
+# map duplicate-suffix headers to canonical names
+_CANON_MAP = {
+    "PAD NO": "Pad No",
+    "PAD START": "Pad Start",
+    "PAD END": "Pad End",
+    "MONTH_YEAR_START": "MONTH_YEAR_START"
+}
+
+def _normalize_headers(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize column headers by removing duplicate suffixes and standardizing names."""
+    canon_map = {}
+    for col in df.columns:
+        u = col.upper()
+        for prefix, canon in _CANON_MAP.items():
+            if u.startswith(prefix):
+                canon_map[col] = canon
+                break
+    if canon_map:
+        df = df.rename(columns=canon_map)
+    return df
+
 def _standardise_cost_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Rename cost columns to a single convention."""
+    df = _normalize_headers(df)
     new_cols = {c: _COL_MAP.get(c.strip().upper(), c) for c in df.columns}
     return df.rename(columns=new_cols)
 
@@ -177,11 +201,88 @@ def _read_main_combo(workbook_path: str) -> pd.DataFrame:
     df.rename(columns={"PAD START":"Pad Start", "PAD END":"Pad End"}, inplace=True)
     return df.reset_index(drop=True)
 
+# --------------------------------------------------------------------------
+def _read_stragglers(workbook_path: str,
+                     main_combo_cols: pd.Index) -> pd.DataFrame:
+    """
+    Extract the straggler block by *position* (duplicate header set
+    starting at column 18) instead of by fuzzy header names.
+    """
+    df_full = pd.read_excel(workbook_path, sheet_name="Database",
+                            header=1, engine="openpyxl")
+
+    # -- find second occurrence of 'Pad No' ------------------------------
+    pad_cols = [i for i, c in enumerate(df_full.columns)
+                if str(c).upper().startswith("PAD NO")]
+    if len(pad_cols) < 2:
+        logger.info("Straggler header set not found.")
+        return pd.DataFrame()
+
+    start_idx = pad_cols[1]                 # second occurrence
+    col_span  = 11                          # see database_map.txt
+    strag_df  = df_full.iloc[:, start_idx : start_idx + col_span].copy()
+
+    strag_df.columns = [
+        "Pad No", "MONTH_YEAR_START", "Is Previous Months",
+        "Pad Start", "Pad End", "Customer", "Pad Name",
+        "CREW SS", "LBRT BASIN", "HHP-HRS", "SAND SHORT TNS"
+    ]
+
+    # zero-out activity we ignore
+    strag_df["HHP-HRS"]        = 0
+    strag_df["SAND SHORT TNS"] = 0
+
+    # drop empty rows
+    strag_df = strag_df.dropna(how="all", subset=["Pad No"]).reset_index(drop=True)
+
+    # ensure dates survive the later NA check
+    for col in ("Pad Start", "Pad End"):
+        strag_df[col] = _coerce_excel_datetime(strag_df[col])
+
+    # numeric placeholders
+    for c in ["Avg. Client Provided", "Prop TN", "Pump Time", "Pump Hours",
+              "Non Sync Hours", "Sync Hours", "Chem Cost"]:
+        strag_df[c] = 0
+
+    strag_df = strag_df.reindex(columns=main_combo_cols)   # keeps the parsed dates
+    return strag_df
+
 # ═══════════════════════════════════════════════════════════════════════════
+def _excel_serial_to_ts(s: pd.Series) -> pd.Series:
+    """
+    Convert Excel-serial floats in *s* to pandas Timestamps
+    and leave everything else untouched.
+    """
+    num_mask = pd.to_numeric(s, errors="coerce").notna()   # element-wise
+    converted = pd.to_datetime(s.where(num_mask),
+                               unit="d", origin="1899-12-30", errors="coerce")
+    return s.where(~num_mask, converted)                   # keep originals
+
+def _coerce_excel_datetime(col: pd.Series) -> pd.Series:
+    """
+    Return a Series of pandas Timestamps.
+
+    - ordinary date strings like '3/24/2025 04:30' are parsed
+    - raw Excel serial floats/ints are converted (1899-12-30 origin)
+    - anything un-convertible becomes NaT
+    """
+    # 1) first pass – try normal string parsing
+    out = pd.to_datetime(col, errors="coerce")
+
+    # 2) whatever is still NaT *might* be an Excel serial number
+    mask_nat = out.isna() & col.notna()
+    if mask_nat.any():
+        serial = pd.to_numeric(col[mask_nat], errors="coerce")
+        out.loc[mask_nat & serial.notna()] = pd.to_datetime(
+            serial.dropna(), unit="d", origin="1899-12-30"
+        )
+
+    return out
+
 def run_unalloc_distribution(
         workbook_path: str,
-        month_start: datetime.date,
-        month_end:   datetime.date
+        month_start: date,
+        month_end:   date
 ) -> None:
 
     print(f"\n[INFO] ► Unalloc Distribution run for: {workbook_path}")
@@ -203,6 +304,7 @@ def run_unalloc_distribution(
     df_adjust_raw  = _read_pvm_adjustments(workbook_path, sheet_adj)
     df_unass_raw   = _read_pvm_body(workbook_path, sheet_unass)
     df_main_raw    = _read_main_combo(workbook_path)
+    df_strag_raw   = _read_stragglers(workbook_path, df_main_raw.columns)
 
     # ---- print raw pulls -------------------------------------------------
     _dbg(df_unalloc_raw, "P. VM – Unalloc  (raw)")
@@ -210,6 +312,7 @@ def run_unalloc_distribution(
     _dbg(df_unass_raw,   "P. VM – Unass (raw)")
     _dbg(df_current_raw, "P. VM – Current  (raw)")
     _dbg(df_main_raw,    "Main_Combo (raw)")
+    _dbg(df_strag_raw,   "Stragglers (raw)")
 
     # ╔════════ STEP 1 ═══════════════════════════════════════════════════╗
     # Combine unallocated lines  (numerator)
@@ -250,31 +353,66 @@ def run_unalloc_distribution(
     df_num = _step1_build_combined(df_unalloc_raw, df_adjust_raw, df_unass_raw)
 
     # ╔════════ STEP 2 ═══════════════════════════════════════════════════╗
-    # Build denominator metrics
-    df_main = df_main_raw.copy()
-    # Pad-day calc (clamped to month)
-    df_main["Pad Start"] = pd.to_datetime(df_main["Pad Start"])
-    df_main["Pad End"]   = pd.to_datetime(df_main["Pad End"])
+    # Combine Main-Combo + Stragglers, then build denominator metrics
+    df_main = pd.concat(
+        [df_main_raw, df_strag_raw],
+        ignore_index=True,
+        sort=False
+    )
+
+    _dbg(
+        df_main,   # show full DataFrame instead of just tail
+        "Main_Combo  +  Stragglers  (concatenated)"
+    )
+
+    # ----- continue with the date conversions & pad-day calc -------------
+    for col in ("Pad Start", "Pad End"):
+        df_main[col] = _coerce_excel_datetime(df_main[col])
     ms, me = pd.Timestamp(month_start), pd.Timestamp(month_end)
-    df_main["pad_days"] = (
-        df_main["Pad End"].clip(upper=me) -
-        df_main["Pad Start"].clip(lower=ms)
-    ).dt.days.clip(lower=0)
+
+    mask = df_main["Pad Start"].isna() & df_main["Pad End"].isna()
+    df_main.loc[mask, ["Pad Start", "Pad End"]] = [ms, me]
+
+    # keep originals intact ⤵
+    orig_start = df_main["Pad Start"].copy()
+    orig_end   = df_main["Pad End"].copy()
+
+    start_clip = orig_start.clip(lower=ms)
+    end_clip   = orig_end  .clip(upper=me + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
+
+    tdelta = (end_clip - start_clip).clip(lower=pd.Timedelta(0))
+    df_main["pad_days"] = tdelta.dt.total_seconds().fillna(0) / 86_400
+
+    # Convenience copy so you can eyeball it in Excel (last column)
+    df_main["Pad_Days_Calc"] = df_main["pad_days"]
 
     # Chem cost (only pads present in Main-Combo)
     df_current = df_current_raw.copy()
     chem_by_pad = df_current.groupby("Project Number")["Chem Cost"].sum()
     df_main["Chem Cost"] = df_main["Pad No"].map(chem_by_pad).fillna(0)
 
+    # ── NEW: guard + weighted-proppant helper ─────────────
+    if "Avg. Client Provided" not in df_main.columns:
+        raise KeyError(
+            "Column 'Avg. Client Provided' is missing in Main-Combo; "
+            "can't compute PropTotal = Prop TN × Avg. Client Provided."
+        )
+
+    # multiply once, then group
+    df_main["PropXClient"] = (
+        df_main["Prop TN"].fillna(0) *
+        df_main["Avg. Client Provided"].fillna(0)
+    )
+
     # Basin-level denominator
     grp_m      = df_main.groupby("LBRT BASIN")
-    prop_total = grp_m["Prop TN"].sum()
+    prop_total = grp_m["PropXClient"].sum()          # ← changed line
     day_total  = grp_m["pad_days"].sum()
     chem_total = grp_m["Chem Cost"].sum()
 
     df_den = pd.DataFrame({
         "Basin":     prop_total.index,
-        "PropTotal": prop_total.values,
+        "PropTotal": prop_total.values,              # keep same column name
         "DayTotal":  day_total.reindex(prop_total.index, fill_value=0).values,
         "ChemTotal": chem_total.reindex(prop_total.index, fill_value=0).values
     })
@@ -376,13 +514,21 @@ def run_unalloc_distribution(
         for r_idx, row in enumerate(
                 dataframe_to_rows(df, index=False, header=True), start=start_row):
             for c_idx, value in enumerate(row, start=1):
-                cell = ws.cell(r_idx, c_idx, value)
+                # ➋ normalise *every* timestamp that comes through here
+                if isinstance(value, pd.Timestamp):
+                    value = value.to_pydatetime()          # <-- plain datetime
+                if isinstance(value, datetime):
+                    ws.cell(r_idx, c_idx, value).number_format = "yyyy-mm-dd hh:mm"
+                else:
+                    ws.cell(r_idx, c_idx, value)
                 # header row styling
                 if r_idx == start_row:
+                    cell = ws.cell(r_idx, c_idx, value)
                     cell.font = Font(bold=True)
                     cell.fill = HEADER_FILL
                 # Currency formatting heuristics
                 if isinstance(value, (int,float)) and ("Cost" in df.columns[c_idx-1] or "Unalloc" in df.columns[c_idx-1]):
+                    cell = ws.cell(r_idx, c_idx, value)
                     cell.number_format = CURRENCY_FMT
         return r_idx + 2   # blank row after table
 
@@ -391,7 +537,8 @@ def run_unalloc_distribution(
     row = _write_section("RAW – P. VM Adjustments",  df_adjust_raw,  row)
     row = _write_section("RAW – P. VM Unass",        df_unass_raw,   row)
     row = _write_section("RAW – P. VM Current",      df_current_raw, row)
-    row = _write_section("RAW – Main_Combo",         df_main_raw,    row)
+    row = _write_section("RAW – Main_Combo",         df_main,    row)
+    row = _write_section("RAW – Stragglers",         df_strag_raw, row)
     row = _write_section("STEP 1 – Numerator Combined", df_num,      row)
     row = _write_section("STEP 2 – Denominator Metrics", df_den,     row)
     row = _write_section("STEP 3-a – Orphan Costs",      df_orphans, row)
@@ -422,6 +569,6 @@ if __name__ == "__main__":
         sys.exit(1)
     run_unalloc_distribution(
         sys.argv[1],
-        datetime.date.fromisoformat(sys.argv[2]),
-        datetime.date.fromisoformat(sys.argv[3])
+        date.fromisoformat(sys.argv[2]),
+        date.fromisoformat(sys.argv[3])
     )
