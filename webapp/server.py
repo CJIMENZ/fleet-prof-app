@@ -66,10 +66,12 @@ def update_fx_compare():
         if data.get('oracle_aud'):
             log_file_operation("Read", data['oracle_aud'])
 
+        ref_file = config['files'].get('ref_data_path', '')
         run_fx_and_comparison(
             config_parser=config,
             oracle_usd_path=data['oracle_usd'],
             oracle_cad_path=data['oracle_cad'],
+            ref_file_path=ref_file,
             oracle_aud_path=data.get('oracle_aud')
         )
         

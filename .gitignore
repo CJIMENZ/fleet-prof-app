@@ -18,3 +18,7 @@ config.ini
 
 # Bytecode caches
 **/__pycache__/
+
+# Log files
+*.log
+logs/
