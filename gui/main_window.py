@@ -25,11 +25,9 @@ class MainWindow(ttk.Window):
     def __init__(self, config_parser):
         self.config_parser = config_parser
 
-        chosen_theme = "journal"
-        if "appearance" in config_parser and "theme" in config_parser["appearance"]:
-            chosen_theme = config_parser["appearance"]["theme"]
-
-        super().__init__(themename=chosen_theme)
+        # Get theme from config or use default
+        theme = config_parser.get('appearance', {}).get('theme', 'journal')
+        super().__init__(themename=theme)
         self.title("My App Main Window")
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 

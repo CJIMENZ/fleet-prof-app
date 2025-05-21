@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Settings</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script>
+      async function selectFile(target) {
+        const path = await pywebview.api.select_file();
+        if (path) document.getElementById(target).value = path;
+      }
+      async function postJson(url, payload) {
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        return r.json();
+      }
+      async function saveSettings() {
+        const data = {
+          token_name: document.getElementById('token_name').value,
+          token_secret: document.getElementById('token_secret').value,
+          ref_data_path: document.getElementById('ref_data_path').value,
+          master_file_path: document.getElementById('master_file_path').value,
+          theme: document.getElementById('theme').value
+        };
+        const res = await postJson('/api/save_settings', data);
+        alert(res.status === 'success' ? 'Saved' : res.message);
+      }
+    </script>
+  </head>
+  <body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="/">Fleet Prof App</a>
+        <div class="navbar-nav">
+          <a class="nav-link" href="/">Home</a>
+          <a class="nav-link active" href="/settings">Settings</a>
+        </div>
+      </div>
+    </nav>
+    <div class="container py-4">
+      <h1 class="mb-4">Settings</h1>
+      <div class="card mb-3">
+        <div class="card-header bg-primary text-white">Tableau Online</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">Token Name</label>
+            <input type="text" id="token_name" class="form-control" value="{{ config['tableau_online'].get('personal_access_token_name', '') }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Token Secret</label>
+            <input type="password" id="token_secret" class="form-control" value="{{ config['tableau_online'].get('personal_access_token_secret', '') }}">
+          </div>
+        </div>
+      </div>
+      <div class="card mb-3">
+        <div class="card-header bg-success text-white">File Paths</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">Reference Data</label>
+            <div class="input-group">
+              <input type="text" id="ref_data_path" class="form-control" value="{{ config['files'].get('ref_data_path', '') }}">
+              <button class="btn btn-outline-secondary" onclick="selectFile('ref_data_path')">Browse</button>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Master File</label>
+            <div class="input-group">
+              <input type="text" id="master_file_path" class="form-control" value="{{ config['files'].get('master_file_path', '') }}">
+              <button class="btn btn-outline-secondary" onclick="selectFile('master_file_path')">Browse</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card mb-3">
+        <div class="card-header bg-info text-white">Appearance</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">Theme</label>
+            <select id="theme" class="form-select">
+              {% for t in ['flatly','journal','darkly','cyborg','superhero','cosmo','solar','united','lumen','pulse','sandstone','minty','yeti'] %}
+              <option value="{{t}}" {% if config['appearance'].get('theme','journal')==t %}selected{% endif %}>{{t}}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="saveSettings()">Save</button>
+    </div>
+  </body>
+</html> 

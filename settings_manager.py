@@ -27,10 +27,12 @@ def load_config():
             "site_url": "tableaulibertyenergycom"
         }
         config["logging"] = {"level": "INFO"}
-        config["appearance"] = {"theme": "darkly"}
         config["files"] = {
             "ref_data_path": r"C:\path\to\RefData.xlsx",
             "master_file_path": r"C:\path\to\MasterFile.xlsx"
+        }
+        config["appearance"] = {
+            "theme": "journal"
         }
     return config
 

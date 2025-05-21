@@ -1,7 +1,7 @@
 """
 gui/settings_dialog.py
-A modal dialog to allow the user to edit config settings,
-including Tableau tokens, theme, and file paths for Ref/Master files.
+A modal dialog to allow the user to edit configuration settings such as
+Tableau tokens and file paths for Ref/Master files.
 """
 
 import ttkbootstrap as ttk
@@ -49,34 +49,6 @@ class SettingsDialog(ttk.Toplevel):
         entry_token_secret.grid(row=row, column=1, padx=5, pady=5)
 
         # ---------------------------
-        # Theme Selection
-        # ---------------------------
-        row += 1
-        if "appearance" in self.config_parser:
-            appearance_cfg = self.config_parser["appearance"]
-        else:
-            appearance_cfg = {}
-
-        all_themes = [
-            "flatly", "journal", "darkly", "cyborg", "superhero",
-            "cosmo", "solar", "united", "lumen", "pulse",
-            "sandstone", "minty", "yeti"
-        ]
-        current_theme = appearance_cfg.get("theme", "journal")
-
-        label_theme = ttk.Label(frame, text="Theme:", bootstyle="secondary")
-        label_theme.grid(row=row, column=0, padx=5, pady=5, sticky="e")
-
-        self.theme_var = ttk.StringVar(value=current_theme)
-        combo_theme = ttk.Combobox(
-            frame,
-            textvariable=self.theme_var,
-            values=all_themes,
-            width=20
-        )
-        combo_theme.grid(row=row, column=1, padx=5, pady=5, sticky="w")
-
-        # ---------------------------
         # RefData & MasterFile Paths
         # ---------------------------
         row += 1
@@ -116,6 +88,18 @@ class SettingsDialog(ttk.Toplevel):
         btn_browse_master.grid(row=row, column=2, padx=5, pady=5, sticky="w")
 
         # ---------------------------
+        # Theme Selection
+        # ---------------------------
+        row += 1
+        label_theme = ttk.Label(frame, text="Theme:", bootstyle="secondary")
+        label_theme.grid(row=row, column=0, padx=5, pady=5, sticky="e")
+
+        themes = ['flatly', 'journal', 'darkly', 'cyborg', 'superhero', 'cosmo', 'solar', 'united', 'lumen', 'pulse', 'sandstone', 'minty', 'yeti']
+        self.theme_var = ttk.StringVar(value=self.config_parser.get('appearance', {}).get('theme', 'journal'))
+        theme_combo = ttk.Combobox(frame, textvariable=self.theme_var, values=themes, state='readonly', width=33)
+        theme_combo.grid(row=row, column=1, padx=5, pady=5, sticky="w")
+
+        # ---------------------------
         # Save Button
         # ---------------------------
         row += 1
@@ -144,22 +128,20 @@ class SettingsDialog(ttk.Toplevel):
         # Ensure sections exist
         if "tableau_online" not in self.config_parser:
             self.config_parser.add_section("tableau_online")
-        if "appearance" not in self.config_parser:
-            self.config_parser.add_section("appearance")
         if "files" not in self.config_parser:
             self.config_parser.add_section("files")
+        if "appearance" not in self.config_parser:
+            self.config_parser.add_section("appearance")
 
         # Tableau
         self.config_parser["tableau_online"]["personal_access_token_name"] = self.token_name_var.get()
         self.config_parser["tableau_online"]["personal_access_token_secret"] = self.token_secret_var.get()
 
-        # Appearance
-        chosen_theme = self.theme_var.get()
-        self.config_parser["appearance"]["theme"] = chosen_theme
-        self.master.style.theme_use(chosen_theme)
-
         # Files
         self.config_parser["files"]["ref_data_path"] = self.ref_data_var.get()
         self.config_parser["files"]["master_file_path"] = self.master_file_var.get()
+
+        # Theme
+        self.config_parser["appearance"]["theme"] = self.theme_var.get()
 
         self.destroy()
