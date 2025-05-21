@@ -16,4 +16,5 @@ config.ini
 # .twbx files
 *.twbx
 
-__pycache__
+# Bytecode caches
+**/__pycache__/
