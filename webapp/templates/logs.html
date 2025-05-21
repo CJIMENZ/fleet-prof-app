@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="mb-4">Application Logs</h1>
+<div class="card">
+  <div class="card-header bg-dark text-white">Logs</div>
+  <div class="card-body">
+    <pre id="log_output" style="height:400px; overflow-y:auto; background:#000; color:#0f0; font-size:0.9em;"></pre>
+  </div>
+</div>
+<script>
+async function refreshLogs(){
+  const res = await fetch('/api/logs');
+  const data = await res.json();
+  const out = document.getElementById('log_output');
+  out.textContent = data.lines.join('\n');
+  out.scrollTop = out.scrollHeight;
+}
+setInterval(refreshLogs, 2000);
+document.addEventListener('DOMContentLoaded', refreshLogs);
+</script>
+{% endblock %} 

@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify
 import logging
 from datetime import date
+import os
 
 from settings_manager import load_config, save_config
 from modules.monthly_workflow import run_fx_and_comparison
@@ -51,6 +52,11 @@ def download_views_page():
 @app.route('/settings')
 def settings_page():
     return render_template('settings.html', config=config)
+
+@app.route('/logs')
+def logs_page():
+    """Display application logs."""
+    return render_template('logs.html')
 
 @app.route('/api/update_fx_compare', methods=['POST'])
 def update_fx_compare():
@@ -221,4 +227,20 @@ def save_settings_api():
         return jsonify(status='success')
     except Exception as e:
         logging.error(e)
-        return jsonify(status='error', message=str(e)), 500 
+        return jsonify(status='error', message=str(e)), 500
+
+@app.route('/api/logs')
+def get_logs():
+    """Return the last 200 lines from the newest log file."""
+    try:
+        log_dir = 'logs'
+        files = [os.path.join(log_dir, f) for f in os.listdir(log_dir) if f.endswith('.log')]
+        if not files:
+            return jsonify(lines=[])
+        latest = max(files, key=os.path.getmtime)
+        with open(latest, 'r') as fh:
+            lines = fh.readlines()[-200:]
+        return jsonify(lines=[l.rstrip('\n') for l in lines])
+    except Exception as e:
+        logging.error(e)
+        return jsonify(lines=[], error=str(e)), 500 

@@ -95,29 +95,25 @@
       }
       .theme-colorful .navbar a { color: #000000 !important; }
 
-      @media (min-width: 992px) {
-        .navbar .dropdown:hover .dropdown-menu {
-          display: block;
-        }
+      /* Dropdown hover effect */
+      .dropdown-menu {
+        display: none;
+        position: absolute;
+        margin-top: 0;
       }
-
-      /* Hover effects */
-      .navbar {
-        transition: transform 0.3s;
-      }
-      .navbar:hover {
-        transform: scale(1.02);
-      }
-
-      .card {
-        transition: transform 0.3s;
-      }
-      .card:hover {
-        transform: scale(1.02);
-      }
-
-      .nav-item.dropdown:hover > .dropdown-menu {
+      
+      .nav-item.dropdown:hover .dropdown-menu {
         display: block;
+      }
+
+      /* Navbar positioning */
+      .navbar-nav {
+        margin-left: auto;
+      }
+
+      /* Keep brand pinned far-right */
+      .navbar-brand {
+        margin-left: auto;
       }
     </style>
     <script>
@@ -145,77 +141,112 @@
         });
         return r.json();
       }
-      async function updateFx() {
-        const data = {
-          oracle_usd: document.getElementById('oracle_usd').value,
-          oracle_cad: document.getElementById('oracle_cad').value,
-          oracle_aud: document.getElementById('oracle_aud').value
-        };
-        const res = await postJson('/api/update_fx_compare', data);
-        alert(res.status === 'success' ? 'Workflow complete' : res.message);
-      }
-      async function pivotCks() {
-        const data = {
-          finance_file: document.getElementById('finance_file').value,
-          month: document.getElementById('target_month').value
-        };
-        const res = await postJson('/api/pivot_cks_data', data);
-        alert(res.status === 'success' ? 'Pivot complete' : res.message);
-      }
-      async function downloadViews() {
-        const data = { save_dir: document.getElementById('save_dir').value };
-        const res = await postJson('/api/download_views', data);
-        if (res.status === 'success') {
-          alert('Views saved to: ' + res.output);
-        } else {
-          alert(res.message);
+      async function updateFx(btn) {
+        btn.disabled = true;
+        try {
+          const data = {
+            oracle_usd: document.getElementById('oracle_usd').value,
+            oracle_cad: document.getElementById('oracle_cad').value,
+            oracle_aud: document.getElementById('oracle_aud').value
+          };
+          const res = await postJson('/api/update_fx_compare', data);
+          alert(res.status === 'success' ? 'Workflow complete' : res.message);
+        } finally {
+          btn.disabled = false;
         }
       }
-      async function buildDatabase() {
-        const data = {
-          exports_file: document.getElementById('exports_file').value,
-          ref_data_file: document.getElementById('db_ref_file').value,
-          output_file: document.getElementById('db_output_file').value
-        };
-        const res = await postJson('/api/build_monthly_database', data);
-        alert(res.status === 'success' ? 'Database built' : res.message);
+      async function pivotCks(btn) {
+        btn.disabled = true;
+        try {
+          const data = {
+            finance_file: document.getElementById('finance_file').value,
+            month: document.getElementById('target_month').value
+          };
+          const res = await postJson('/api/pivot_cks_data', data);
+          alert(res.status === 'success' ? 'Pivot complete' : res.message);
+        } finally {
+          btn.disabled = false;
+        }
       }
-      async function generatePnl() {
-        const data = { month_file: document.getElementById('pnl_month_file').value };
-        const res = await postJson('/api/generate_pnl_pivot', data);
-        alert(res.status === 'success' ? 'PnL Pivot generated' : res.message);
+      async function downloadViews(btn) {
+        btn.disabled = true;
+        try {
+          const data = { save_dir: document.getElementById('save_dir').value };
+          const res = await postJson('/api/download_views', data);
+          if (res.status === 'success') {
+            alert('Views saved to: ' + res.output);
+          } else {
+            alert(res.message);
+          }
+        } finally {
+          btn.disabled = false;
+        }
       }
-      async function generateVmAdj() {
-        const data = { workbook: document.getElementById('vm_adj_file').value };
-        const res = await postJson('/api/generate_vm_adj', data);
-        alert(res.status === 'success' ? 'VM Adjustment generated' : res.message);
+      async function buildDatabase(btn) {
+        btn.disabled = true;
+        try {
+          const data = {
+            exports_file: document.getElementById('exports_file').value,
+            ref_data_file: document.getElementById('db_ref_file').value,
+            output_file: document.getElementById('db_output_file').value
+          };
+          const res = await postJson('/api/build_monthly_db', data);
+          alert(res.status === 'success' ? 'Database built' : res.message);
+        } finally {
+          btn.disabled = false;
+        }
       }
-      async function runUnalloc() {
-        const data = {
-          workbook: document.getElementById('unalloc_file').value,
-          start: document.getElementById('unalloc_start').value,
-          end: document.getElementById('unalloc_end').value
-        };
-        const res = await postJson('/api/run_unalloc_distribution', data);
-        alert(res.status === 'success' ? 'Distribution complete' : res.message);
+      async function generatePnl(btn) {
+        btn.disabled = true;
+        try {
+          const data = { month_file: document.getElementById('pnl_month_file').value };
+          const res = await postJson('/api/generate_pnl_pivot', data);
+          alert(res.status === 'success' ? 'PnL Pivot generated' : res.message);
+        } finally {
+          btn.disabled = false;
+        }
+      }
+      async function generateVmAdj(btn) {
+        btn.disabled = true;
+        try {
+          const data = { workbook: document.getElementById('vm_adj_file').value };
+          const res = await postJson('/api/generate_project_vm_adj', data);
+          alert(res.status === 'success' ? 'VM Adjustment generated' : res.message);
+        } finally {
+          btn.disabled = false;
+        }
+      }
+      async function runUnalloc(btn) {
+        btn.disabled = true;
+        try {
+          const data = {
+            workbook: document.getElementById('unalloc_file').value,
+            start: document.getElementById('unalloc_start').value,
+            end: document.getElementById('unalloc_end').value
+          };
+          const res = await postJson('/api/create_unalloc_distributions', data);
+          alert(res.status === 'success' ? 'Distribution complete' : res.message);
+        } finally {
+          btn.disabled = false;
+        }
       }
     </script>
   </head>
   <body class="theme-light">
     <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom">
       <div class="container-fluid">
-        <a class="navbar-brand" href="/">Fleet Prof App</a>
+        <!-- ⬅️  hamburger first so it stays top-left -->
         <button
-          class="navbar-toggler"
+          class="navbar-toggler me-2"
           type="button"
           data-bs-toggle="collapse"
           data-bs-target="#navbarNavDropdown"
           aria-controls="navbarNavDropdown"
           aria-expanded="false"
-          aria-label="Toggle navigation"
-        >
+          aria-label="Toggle navigation">
           <span class="navbar-toggler-icon"></span>
         </button>
+
         <div class="collapse navbar-collapse" id="navbarNavDropdown">
           <ul class="navbar-nav">
             <li class="nav-item">
@@ -223,6 +254,9 @@
             </li>
             <li class="nav-item">
               <a class="nav-link" href="/settings"><i class="bi bi-gear"></i> Settings</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/logs"><i class="bi bi-clipboard-data"></i> Logs</a>
             </li>
             <li class="nav-item dropdown">
               <a
@@ -247,11 +281,26 @@
             </li>
           </ul>
         </div>
+
+        <!-- ⬅️  brand always on the far right -->
+        <a class="navbar-brand ms-auto" href="/">Fleet Prof App</a>
       </div>
     </nav>
     <div class="container py-4">
       {% block content %}{% endblock %}
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Hover-open for hamburger -->
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        const toggler  = document.querySelector('.navbar-toggler');
+        const collapse = document.getElementById('navbarNavDropdown');
+        if (toggler && collapse) {
+          toggler.addEventListener('mouseenter', () =>
+            bootstrap.Collapse.getOrCreateInstance(collapse).show());
+        }
+      });
+    </script>
   </body>
 </html>
