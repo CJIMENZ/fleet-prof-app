@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="mb-4">Generate Project VM Adj</h1>
+<div class="card mb-3">
+  <div class="card-header bg-warning text-dark">Generate Project VM Adj</div>
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label">Workbook</label>
+      <div class="input-group">
+        <input type="text" id="vm_adj_file" class="form-control">
+        <button class="btn btn-outline-secondary" onclick="selectFile('vm_adj_file')">Browse</button>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="generateVmAdj()">Generate</button>
+  </div>
+</div>
+{% endblock %}

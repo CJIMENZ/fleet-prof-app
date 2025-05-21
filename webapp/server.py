@@ -19,6 +19,34 @@ config = load_config()
 def index():
     return render_template('index.html')
 
+@app.route('/update_fx')
+def update_fx_page():
+    return render_template('update_fx.html')
+
+@app.route('/pivot_ck')
+def pivot_ck_page():
+    return render_template('pivot_ck.html')
+
+@app.route('/build_db')
+def build_db_page():
+    return render_template('build_db.html')
+
+@app.route('/pnl_pivot')
+def pnl_pivot_page():
+    return render_template('pnl_pivot.html')
+
+@app.route('/vm_adj')
+def vm_adj_page():
+    return render_template('vm_adj.html')
+
+@app.route('/unalloc_dist')
+def unalloc_dist_page():
+    return render_template('unalloc_dist.html')
+
+@app.route('/download_views')
+def download_views_page():
+    return render_template('download_views.html')
+
 @app.route('/settings')
 def settings_page():
     return render_template('settings.html', config=config)

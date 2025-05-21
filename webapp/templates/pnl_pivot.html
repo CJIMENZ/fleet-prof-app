@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="mb-4">Generate PnL Pivot</h1>
+<div class="card mb-3">
+  <div class="card-header bg-secondary text-white">Generate PnL Pivot</div>
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label">Month Data File</label>
+      <div class="input-group">
+        <input type="text" id="pnl_month_file" class="form-control">
+        <button class="btn btn-outline-secondary" onclick="selectFile('pnl_month_file')">Browse</button>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="generatePnl()">Generate</button>
+  </div>
+</div>
+{% endblock %}

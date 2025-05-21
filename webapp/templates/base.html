@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title or 'Fleet Prof App' }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+      body.theme-light {
+        background-color: #f8f9fa;
+        color: #212529;
+      }
+      body.theme-dark {
+        background-color: #212529;
+        color: #f8f9fa;
+      }
+      body.theme-colorful {
+        background-color: #ffffff;
+        color: #212529;
+      }
+
+      /* Card styles for each theme */
+      .theme-light .card {
+        background-color: #ffffff;
+        border-color: #dee2e6;
+      }
+      .theme-light .card-header {
+        background-color: #ffffff !important;
+        color: #212529 !important;
+      }
+      .theme-light .form-control {
+        background-color: #ffffff;
+        border-color: #dee2e6;
+        color: #212529;
+      }
+      .theme-light .form-control:focus {
+        background-color: #ffffff;
+        color: #212529;
+      }
+
+      .theme-dark .card {
+        background-color: #2c3034;
+        border-color: #373b3e;
+        color: #f8f9fa;
+      }
+      .theme-dark .card-header {
+        background-color: #343a40 !important;
+        color: #f8f9fa;
+      }
+      .theme-dark .form-control {
+        background-color: #2c3034;
+        border-color: #373b3e;
+        color: #f8f9fa;
+      }
+      .theme-dark .form-control:focus {
+        background-color: #2c3034;
+        color: #f8f9fa;
+      }
+
+      .theme-colorful .card {
+        background-color: #fff0f0;
+        border-color: #ffcccc;
+      }
+      .theme-colorful .card-header {
+        background-color: inherit;
+      }
+      .theme-colorful .form-control {
+        background-color: #ffffff;
+        border-color: #ffcccc;
+        color: #212529;
+      }
+      .theme-colorful .form-control:focus {
+        background-color: #ffffff;
+        color: #212529;
+      }
+
+      /* Navbar styles for each theme */
+      .theme-light .navbar {
+        background-color: #ffffff !important;
+        border-color: #dee2e6;
+        color: #212529;
+      }
+      .theme-light .navbar a { color: #212529 !important; }
+      .theme-dark .navbar {
+        background-color: #2c3034 !important;
+        border-color: #373b3e;
+        color: #f8f9fa;
+      }
+      .theme-dark .navbar a { color: #f8f9fa !important; }
+      .theme-colorful .navbar {
+        background-color: #fff0f0 !important;
+        border-color: #ffcccc;
+        color: #212529;
+      }
+      .theme-colorful .navbar a { color: #212529 !important; }
+    </style>
+    <script>
+      async function selectFile(target) {
+        const path = await pywebview.api.select_file();
+        if (path) document.getElementById(target).value = path;
+      }
+      async function selectFolder(target) {
+        const path = await pywebview.api.select_folder();
+        if (path) document.getElementById(target).value = path;
+      }
+      function applyTheme(t) {
+        document.body.className = 'theme-' + t;
+        localStorage.setItem('theme', t);
+      }
+      document.addEventListener('DOMContentLoaded', () => {
+        const t = localStorage.getItem('theme') || 'light';
+        applyTheme(t);
+      });
+      async function postJson(url, payload) {
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        return r.json();
+      }
+      async function updateFx() {
+        const data = {
+          oracle_usd: document.getElementById('oracle_usd').value,
+          oracle_cad: document.getElementById('oracle_cad').value,
+          oracle_aud: document.getElementById('oracle_aud').value
+        };
+        const res = await postJson('/api/update_fx_compare', data);
+        alert(res.status === 'success' ? 'Workflow complete' : res.message);
+      }
+      async function pivotCks() {
+        const data = {
+          finance_file: document.getElementById('finance_file').value,
+          month: document.getElementById('target_month').value
+        };
+        const res = await postJson('/api/pivot_cks_data', data);
+        alert(res.status === 'success' ? 'Pivot complete' : res.message);
+      }
+      async function downloadViews() {
+        const data = { save_dir: document.getElementById('save_dir').value };
+        const res = await postJson('/api/download_views', data);
+        if (res.status === 'success') {
+          alert('Views saved to: ' + res.output);
+        } else {
+          alert(res.message);
+        }
+      }
+      async function buildDatabase() {
+        const data = {
+          exports_file: document.getElementById('exports_file').value,
+          ref_data_file: document.getElementById('db_ref_file').value,
+          output_file: document.getElementById('db_output_file').value
+        };
+        const res = await postJson('/api/build_monthly_database', data);
+        alert(res.status === 'success' ? 'Database built' : res.message);
+      }
+      async function generatePnl() {
+        const data = { month_file: document.getElementById('pnl_month_file').value };
+        const res = await postJson('/api/generate_pnl_pivot', data);
+        alert(res.status === 'success' ? 'PnL Pivot generated' : res.message);
+      }
+      async function generateVmAdj() {
+        const data = { workbook: document.getElementById('vm_adj_file').value };
+        const res = await postJson('/api/generate_vm_adj', data);
+        alert(res.status === 'success' ? 'VM Adjustment generated' : res.message);
+      }
+      async function runUnalloc() {
+        const data = {
+          workbook: document.getElementById('unalloc_file').value,
+          start: document.getElementById('unalloc_start').value,
+          end: document.getElementById('unalloc_end').value
+        };
+        const res = await postJson('/api/run_unalloc_distribution', data);
+        alert(res.status === 'success' ? 'Distribution complete' : res.message);
+      }
+    </script>
+  </head>
+  <body class="theme-light">
+    <nav class="navbar navbar-expand-lg bg-white border-bottom">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="/">Fleet Prof App</a>
+        <div class="navbar-nav">
+          <a class="nav-link" href="/update_fx">Update FX</a>
+          <a class="nav-link" href="/pivot_ck">Pivot CK Data</a>
+          <a class="nav-link" href="/build_db">Build DB</a>
+          <a class="nav-link" href="/pnl_pivot">PnL Pivot</a>
+          <a class="nav-link" href="/vm_adj">Project VM Adj</a>
+          <a class="nav-link" href="/unalloc_dist">Unalloc Dist</a>
+          <a class="nav-link" href="/download_views">Download Views</a>
+          <a class="nav-link" href="/settings">Settings</a>
+        </div>
+      </div>
+    </nav>
+    <div class="container py-4">
+      {% block content %}{% endblock %}
+    </div>
+  </body>
+</html>

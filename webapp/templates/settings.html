@@ -1,3 +1,27 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="mb-4">Settings</h1>
+<div class="card mb-3">
+  <div class="card-header bg-primary text-white">Tableau Online</div>
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label">Token Name</label>
+      <input type="text" id="token_name" class="form-control" value="{{ config['tableau_online'].get('personal_access_token_name', '') }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Token Secret</label>
+      <input type="password" id="token_secret" class="form-control" value="{{ config['tableau_online'].get('personal_access_token_secret', '') }}">
+    </div>
+  </div>
+</div>
+<div class="card mb-3">
+  <div class="card-header bg-success text-white">File Paths</div>
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label">Reference Data</label>
+      <div class="input-group">
+        <input type="text" id="ref_data_path" class="form-control" value="{{ config['files'].get('ref_data_path', '') }}">
+        <button class="btn btn-outline-secondary" onclick="selectFile('ref_data_path')">Browse</button>
 <!doctype html>
 <html lang="en">
   <head>
@@ -179,20 +203,28 @@
           </div>
         </div>
       </div>
-      <div class="card mb-3">
-        <div class="card-header bg-info text-white">Appearance</div>
-        <div class="card-body">
-          <div class="mb-3">
-            <label class="form-label">Theme</label>
-            <select id="theme" class="form-select" onchange="applyTheme(this.value)">
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-              <option value="colorful">Colorful</option>
-            </select>
-          </div>
-        </div>
-      </div>
-      <button class="btn btn-primary" onclick="saveSettings()">Save</button>
     </div>
-  </body>
-</html> 
+    <div class="mb-3">
+      <label class="form-label">Master File</label>
+      <div class="input-group">
+        <input type="text" id="master_file_path" class="form-control" value="{{ config['files'].get('master_file_path', '') }}">
+        <button class="btn btn-outline-secondary" onclick="selectFile('master_file_path')">Browse</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="card mb-3">
+  <div class="card-header bg-info text-white">Appearance</div>
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label">Theme</label>
+      <select id="theme" class="form-select" onchange="applyTheme(this.value)">
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+        <option value="colorful">Colorful</option>
+      </select>
+    </div>
+  </div>
+</div>
+<button class="btn btn-primary" onclick="saveSettings()">Save</button>
+{% endblock %}
