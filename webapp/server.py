@@ -75,7 +75,7 @@ def save_settings_api():
 
         if 'appearance' not in config:
             config['appearance'] = {}
-        config['appearance']['theme'] = data.get('theme', 'journal')
+        config['appearance']['theme'] = data.get('theme', 'light')
 
         save_config(config)
         return jsonify(status='success')
