@@ -123,8 +123,7 @@
         const data = {
           oracle_usd: document.getElementById('oracle_usd').value,
           oracle_cad: document.getElementById('oracle_cad').value,
-          oracle_aud: document.getElementById('oracle_aud').value,
-          ref_file:   document.getElementById('ref_file').value
+          oracle_aud: document.getElementById('oracle_aud').value
         };
         const res = await postJson('/api/update_fx_compare', data);
         alert(res.status === 'success' ? 'Workflow complete' : res.message);
@@ -132,7 +131,6 @@
       async function pivotCks() {
         const data = {
           finance_file: document.getElementById('finance_file').value,
-          ref_file: document.getElementById('cks_ref_file').value,
           month: document.getElementById('target_month').value
         };
         const res = await postJson('/api/pivot_cks_data', data);
