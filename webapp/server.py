@@ -1,10 +1,16 @@
 from flask import Flask, render_template, request, jsonify
 import logging
 
+from datetime import date
+
 from settings_manager import load_config, save_config
 from modules.monthly_workflow import run_fx_and_comparison
 from modules.cks_pivot_operations import pivot_cks_data_to_ref
 from modules.view_download_operations import download_all_views
+from modules.report_generation import build_monthly_database
+from modules.pnl_pivot_operations import generate_pnl_pivot
+from modules.project_vm_adjustment import generate_project_vm_adj
+from modules.unalloc_distribution import run_unalloc_distribution
 
 app = Flask(__name__)
 config = load_config()
@@ -55,6 +61,54 @@ def download_views():
     try:
         out = download_all_views(config, data['save_dir'])
         return jsonify(status='success', output=out)
+    except Exception as e:
+        logging.error(e)
+        return jsonify(status='error', message=str(e)), 500
+
+@app.route('/api/build_monthly_database', methods=['POST'])
+def build_monthly_db():
+    data = request.get_json()
+    try:
+        build_monthly_database(
+            data['exports_file'],
+            data['ref_data_file'],
+            data['output_file']
+        )
+        return jsonify(status='success')
+    except Exception as e:
+        logging.error(e)
+        return jsonify(status='error', message=str(e)), 500
+
+@app.route('/api/generate_pnl_pivot', methods=['POST'])
+def generate_pnl():
+    data = request.get_json()
+    try:
+        generate_pnl_pivot(data['month_file'])
+        return jsonify(status='success')
+    except Exception as e:
+        logging.error(e)
+        return jsonify(status='error', message=str(e)), 500
+
+@app.route('/api/generate_vm_adj', methods=['POST'])
+def generate_vm_adj():
+    data = request.get_json()
+    try:
+        generate_project_vm_adj(data['workbook'])
+        return jsonify(status='success')
+    except Exception as e:
+        logging.error(e)
+        return jsonify(status='error', message=str(e)), 500
+
+@app.route('/api/run_unalloc_distribution', methods=['POST'])
+def unalloc_distribution():
+    data = request.get_json()
+    try:
+        run_unalloc_distribution(
+            data['workbook'],
+            date.fromisoformat(data['start']),
+            date.fromisoformat(data['end'])
+        )
+        return jsonify(status='success')
     except Exception as e:
         logging.error(e)
         return jsonify(status='error', message=str(e)), 500

@@ -26,7 +26,7 @@
       }
       .theme-light .card-header {
         background-color: #ffffff !important;
-        color: #212529;
+        color: #212529 !important;
       }
       .theme-light .form-control {
         background-color: #ffffff;
@@ -147,6 +147,34 @@
           alert(res.message);
         }
       }
+      async function buildDatabase() {
+        const data = {
+          exports_file: document.getElementById('exports_file').value,
+          ref_data_file: document.getElementById('db_ref_file').value,
+          output_file: document.getElementById('db_output_file').value
+        };
+        const res = await postJson('/api/build_monthly_database', data);
+        alert(res.status === 'success' ? 'Database built' : res.message);
+      }
+      async function generatePnl() {
+        const data = { month_file: document.getElementById('pnl_month_file').value };
+        const res = await postJson('/api/generate_pnl_pivot', data);
+        alert(res.status === 'success' ? 'PnL Pivot generated' : res.message);
+      }
+      async function generateVmAdj() {
+        const data = { workbook: document.getElementById('vm_adj_file').value };
+        const res = await postJson('/api/generate_vm_adj', data);
+        alert(res.status === 'success' ? 'VM Adjustment generated' : res.message);
+      }
+      async function runUnalloc() {
+        const data = {
+          workbook: document.getElementById('unalloc_file').value,
+          start: document.getElementById('unalloc_start').value,
+          end: document.getElementById('unalloc_end').value
+        };
+        const res = await postJson('/api/run_unalloc_distribution', data);
+        alert(res.status === 'success' ? 'Distribution complete' : res.message);
+      }
     </script>
   </head>
   <body class="theme-light">
@@ -204,7 +232,85 @@
             <label class="form-label">Target Month (e.g. Mar-24)</label>
             <input type="text" id="target_month" class="form-control">
           </div>
-          <button class="btn btn-primary" onclick="pivotCks()">Pivot</button>
+        <button class="btn btn-primary" onclick="pivotCks()">Pivot</button>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header bg-warning text-dark">Build Monthly Database</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">Tableau Exports</label>
+            <div class="input-group">
+              <input type="text" id="exports_file" class="form-control">
+              <button class="btn btn-outline-secondary" onclick="selectFile('exports_file')">Browse</button>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Reference Data</label>
+            <div class="input-group">
+              <input type="text" id="db_ref_file" class="form-control">
+              <button class="btn btn-outline-secondary" onclick="selectFile('db_ref_file')">Browse</button>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Output File</label>
+            <div class="input-group">
+              <input type="text" id="db_output_file" class="form-control">
+              <button class="btn btn-outline-secondary" onclick="selectFile('db_output_file')">Browse</button>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="buildDatabase()">Build</button>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header bg-secondary text-white">Generate PnL Pivot</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">Month Data File</label>
+            <div class="input-group">
+              <input type="text" id="pnl_month_file" class="form-control">
+              <button class="btn btn-outline-secondary" onclick="selectFile('pnl_month_file')">Browse</button>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="generatePnl()">Generate</button>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header bg-warning text-dark">Generate Project VM Adj</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">Workbook</label>
+            <div class="input-group">
+              <input type="text" id="vm_adj_file" class="form-control">
+              <button class="btn btn-outline-secondary" onclick="selectFile('vm_adj_file')">Browse</button>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="generateVmAdj()">Generate</button>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header bg-secondary text-white">Run Unalloc Distribution</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">Workbook</label>
+            <div class="input-group">
+              <input type="text" id="unalloc_file" class="form-control">
+              <button class="btn btn-outline-secondary" onclick="selectFile('unalloc_file')">Browse</button>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Start Date</label>
+            <input type="date" id="unalloc_start" class="form-control">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">End Date</label>
+            <input type="date" id="unalloc_end" class="form-control">
+          </div>
+          <button class="btn btn-primary" onclick="runUnalloc()">Run</button>
         </div>
       </div>
 
