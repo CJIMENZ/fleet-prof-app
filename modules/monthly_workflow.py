@@ -53,7 +53,7 @@ def run_fx_and_comparison(
     new_wb, latest_month = clean_cad_data(new_wb, latest_month)
 
     # 4) integrate Tableau => 'PnL_CAN_GL'
-    new_wb = integrate_tableau(config_parser, new_wb)
+    new_wb = integrate_tableau(config_parser, new_wb, latest_month)
 
     # 5) create comparison => merges to "Comparison"
     new_wb = create_comparison_sheet(new_wb, latest_month, ref_file_path)

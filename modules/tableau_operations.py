@@ -6,6 +6,7 @@ import logging
 import requests
 from tableau_api_lib import TableauServerConnection
 from openpyxl import load_workbook
+from urllib import parse
 
 def get_tableau_connection(config_parser):
     """
@@ -40,11 +41,14 @@ def sign_out_tableau(conn):
 def integrate_tableau(
     config_parser,
     new_workbook_path,
-    view_id="79a33d76-77fd-4c1d-846c-18b02c606d71"
+    latest_month,
+    view_id="79a33d76-77fd-4c1d-846c-18b02c606d71",
 ):
     """
-    Downloads crosstab for the given 'view_id' from Tableau,
-    appends it as a sheet named 'PnL_CAN_GL' in new_workbook_path.
+    Downloads the PnL_CAN_GL crosstab filtered by ``latest_month`` from Tableau
+    and appends it as a sheet named ``PnL_CAN_GL`` in ``new_workbook_path``.
+    The ``latest_month`` value is passed via the Tableau parameter
+    ``"Year-Month String"`` so the downloaded data matches the FX month.
     """
     logging.info("Integrating Tableau data.")
     try:
@@ -55,10 +59,16 @@ def integrate_tableau(
         site_id = conn.site_id
         logging.info(f"Using site_id: {site_id}")
 
-        # fetch the crosstab Excel
-        endpoint = f"/api/{conn.api_version}/sites/{site_id}/views/{view_id}/crosstab/excel"
+        # fetch the crosstab Excel filtered by the provided month
+        field = "Year-Month String"
+        field_q = parse.quote_plus(field)
+        value_q = parse.quote_plus(str(latest_month))
+        endpoint = (
+            f"/api/{conn.api_version}/sites/{site_id}/views/{view_id}/crosstab/excel"
+            f"?vf_{field_q}={value_q}"
+        )
         full_url = conn.server + endpoint
-        headers  = {"X-Tableau-Auth": conn.auth_token}
+        headers = {"X-Tableau-Auth": conn.auth_token}
 
         resp = requests.get(full_url, headers=headers)
         resp.raise_for_status()
