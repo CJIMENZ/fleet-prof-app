@@ -64,8 +64,7 @@ def integrate_tableau(
         field_q = parse.quote_plus(field)
         value_q = parse.quote_plus(str(latest_month))
         endpoint = (
-            f"/api/{conn.api_version}/sites/{site_id}/views/{view_id}/crosstab/excel"
-            f"?vf_{field_q}={value_q}"
+            f"/api/{conn.api_version}/sites/{site_id}/views/{view_id}/crosstab/excel?vf_{field_q}={value_q}"
         )
         full_url = conn.server + endpoint
         headers = {"X-Tableau-Auth": conn.auth_token}

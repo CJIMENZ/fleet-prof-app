@@ -47,4 +47,37 @@
   </div>
 </div>
 <button class="btn btn-primary" onclick="saveSettings()">Save</button>
+
+<script>
+async function saveSettings() {
+  const data = {
+    token_name: document.getElementById('token_name').value,
+    token_secret: document.getElementById('token_secret').value,
+    ref_data_path: document.getElementById('ref_data_path').value,
+    master_file_path: document.getElementById('master_file_path').value,
+    theme: document.getElementById('theme').value
+  };
+  
+  try {
+    const response = await fetch('/api/save_settings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(data)
+    });
+    
+    const result = await response.json();
+    if (result.status === 'success') {
+      alert('Settings saved successfully');
+      // Reload the page to reflect changes
+      window.location.reload();
+    } else {
+      alert('Error saving settings: ' + result.message);
+    }
+  } catch (error) {
+    alert('Error saving settings: ' + error.message);
+  }
+}
+</script>
 {% endblock %}
