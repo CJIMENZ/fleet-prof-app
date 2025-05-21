@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="mb-4">Update FX &amp; Comparison</h1>
+<div class="card mb-3">
+  <div class="card-header bg-primary text-white">Update FX &amp; Comparison</div>
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label">Oracle USD</label>
+      <div class="input-group">
+        <input type="text" id="oracle_usd" class="form-control">
+        <button class="btn btn-outline-secondary" onclick="selectFile('oracle_usd')">Browse</button>
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Oracle CAD</label>
+      <div class="input-group">
+        <input type="text" id="oracle_cad" class="form-control">
+        <button class="btn btn-outline-secondary" onclick="selectFile('oracle_cad')">Browse</button>
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Oracle AUD (optional)</label>
+      <div class="input-group">
+        <input type="text" id="oracle_aud" class="form-control">
+        <button class="btn btn-outline-secondary" onclick="selectFile('oracle_aud')">Browse</button>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="updateFx()">Run Workflow</button>
+  </div>
+</div>
+{% endblock %}
