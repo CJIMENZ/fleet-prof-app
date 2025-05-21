@@ -1,6 +1,5 @@
 from flask import Flask, render_template, request, jsonify
 import logging
-
 from datetime import date
 
 from settings_manager import load_config, save_config
@@ -11,12 +10,14 @@ from modules.report_generation import build_monthly_database
 from modules.pnl_pivot_operations import generate_pnl_pivot
 from modules.project_vm_adjustment import generate_project_vm_adj
 from modules.unalloc_distribution import run_unalloc_distribution
+from modules.logging_setup import log_user_action, log_file_operation, log_operation_result, log_error
 
 app = Flask(__name__)
 config = load_config()
 
 @app.route('/')
 def index():
+    log_user_action("Page View", "Home Page")
     return render_template('index.html')
 
 @app.route('/update_fx')
@@ -53,93 +54,148 @@ def settings_page():
 
 @app.route('/api/update_fx_compare', methods=['POST'])
 def update_fx_compare():
-    data = request.get_json()
     try:
-        ref_file = config.get('files', {}).get('ref_data_path', '')
+        data = request.json
+        log_user_action("Update FX/Compare", f"Files: USD={data.get('oracle_usd')}, CAD={data.get('oracle_cad')}, AUD={data.get('oracle_aud')}")
+        
+        # Log file operations
+        if data.get('oracle_usd'):
+            log_file_operation("Read", data['oracle_usd'])
+        if data.get('oracle_cad'):
+            log_file_operation("Read", data['oracle_cad'])
+        if data.get('oracle_aud'):
+            log_file_operation("Read", data['oracle_aud'])
+
         run_fx_and_comparison(
-            config,
-            data['oracle_usd'],
-            data['oracle_cad'],
-            ref_file,
-            oracle_aud_path=data.get('oracle_aud') or None
+            config_parser=config,
+            oracle_usd_path=data['oracle_usd'],
+            oracle_cad_path=data['oracle_cad'],
+            oracle_aud_path=data.get('oracle_aud')
         )
-        return jsonify(status='success')
+        
+        log_operation_result("Update FX/Compare", "Success")
+        return jsonify({"status": "success"})
     except Exception as e:
-        logging.error(e)
-        return jsonify(status='error', message=str(e)), 500
+        log_error(e, "Update FX/Compare")
+        return jsonify({"status": "error", "message": str(e)})
 
 @app.route('/api/pivot_cks_data', methods=['POST'])
 def pivot_cks_data():
-    data = request.get_json()
     try:
-        ref_file = config.get('files', {}).get('ref_data_path', '')
+        data = request.json
+        log_user_action("Pivot CK Data", f"File: {data.get('finance_file')}, Month: {data.get('month')}")
+        
+        if data.get('finance_file'):
+            log_file_operation("Read", data['finance_file'])
+
         pivot_cks_data_to_ref(
-            data['finance_file'],
-            ref_file,
-            data['month']
+            finance_file=data['finance_file'],
+            ref_file=config['files']['ref_data_path'],
+            target_month_str=data['month']
         )
-        return jsonify(status='success')
+        
+        log_operation_result("Pivot CK Data", "Success")
+        return jsonify({"status": "success"})
     except Exception as e:
-        logging.error(e)
-        return jsonify(status='error', message=str(e)), 500
+        log_error(e, "Pivot CK Data")
+        return jsonify({"status": "error", "message": str(e)})
 
 @app.route('/api/download_views', methods=['POST'])
 def download_views():
-    data = request.get_json()
     try:
-        out = download_all_views(config, data['save_dir'])
-        return jsonify(status='success', output=out)
+        data = request.json
+        log_user_action("Download Views", f"Output folder: {data.get('output_folder')}")
+        
+        output = download_all_views(config, data['output_folder'])
+        log_operation_result("Download Views", "Success", f"Output: {output}")
+        return jsonify({"status": "success", "output": output})
     except Exception as e:
-        logging.error(e)
-        return jsonify(status='error', message=str(e)), 500
+        log_error(e, "Download Views")
+        return jsonify({"status": "error", "message": str(e)})
 
-@app.route('/api/build_monthly_database', methods=['POST'])
+@app.route('/api/build_monthly_db', methods=['POST'])
 def build_monthly_db():
-    data = request.get_json()
     try:
+        data = request.json
+        log_user_action("Build Monthly Database", 
+                       f"Tableau exports: {data.get('tableau_exports')}, "
+                       f"Ref data: {data.get('ref_data')}, "
+                       f"Output: {data.get('output')}")
+        
+        # Log file operations
+        if data.get('tableau_exports'):
+            log_file_operation("Read", data['tableau_exports'])
+        if data.get('ref_data'):
+            log_file_operation("Read", data['ref_data'])
+        if data.get('output'):
+            log_file_operation("Write", data['output'])
+
         build_monthly_database(
-            data['exports_file'],
-            data['ref_data_file'],
-            data['output_file']
+            tableau_exports_path=data['tableau_exports'],
+            ref_data_path=data['ref_data'],
+            output_path=data['output']
         )
-        return jsonify(status='success')
+        
+        log_operation_result("Build Monthly Database", "Success")
+        return jsonify({"status": "success"})
     except Exception as e:
-        logging.error(e)
-        return jsonify(status='error', message=str(e)), 500
+        log_error(e, "Build Monthly Database")
+        return jsonify({"status": "error", "message": str(e)})
 
 @app.route('/api/generate_pnl_pivot', methods=['POST'])
-def generate_pnl():
-    data = request.get_json()
+def generate_pnl_pivot_endpoint():
     try:
-        generate_pnl_pivot(data['month_file'])
-        return jsonify(status='success')
-    except Exception as e:
-        logging.error(e)
-        return jsonify(status='error', message=str(e)), 500
+        data = request.json
+        log_user_action("Generate PnL Pivot", f"File: {data.get('month_data_file')}")
+        
+        if data.get('month_data_file'):
+            log_file_operation("Read", data['month_data_file'])
 
-@app.route('/api/generate_vm_adj', methods=['POST'])
-def generate_vm_adj():
-    data = request.get_json()
-    try:
-        generate_project_vm_adj(data['workbook'])
-        return jsonify(status='success')
+        generate_pnl_pivot(data['month_data_file'])
+        log_operation_result("Generate PnL Pivot", "Success")
+        return jsonify({"status": "success"})
     except Exception as e:
-        logging.error(e)
-        return jsonify(status='error', message=str(e)), 500
+        log_error(e, "Generate PnL Pivot")
+        return jsonify({"status": "error", "message": str(e)})
 
-@app.route('/api/run_unalloc_distribution', methods=['POST'])
-def unalloc_distribution():
-    data = request.get_json()
+@app.route('/api/generate_project_vm_adj', methods=['POST'])
+def generate_project_vm_adj_endpoint():
     try:
+        data = request.json
+        log_user_action("Generate Project VM Adjustment", f"File: {data.get('month_data_file')}")
+        
+        if data.get('month_data_file'):
+            log_file_operation("Read", data['month_data_file'])
+
+        generate_project_vm_adj(data['month_data_file'])
+        log_operation_result("Generate Project VM Adjustment", "Success")
+        return jsonify({"status": "success"})
+    except Exception as e:
+        log_error(e, "Generate Project VM Adjustment")
+        return jsonify({"status": "error", "message": str(e)})
+
+@app.route('/api/create_unalloc_distributions', methods=['POST'])
+def create_unalloc_distributions():
+    try:
+        data = request.json
+        log_user_action("Create Unallocated Distributions", 
+                       f"File: {data.get('workbook')}, "
+                       f"Month: {data.get('month')}")
+        
+        if data.get('workbook'):
+            log_file_operation("Read", data['workbook'])
+
         run_unalloc_distribution(
             data['workbook'],
-            date.fromisoformat(data['start']),
-            date.fromisoformat(data['end'])
+            data['month_start'],
+            data['month_end']
         )
-        return jsonify(status='success')
+        
+        log_operation_result("Create Unallocated Distributions", "Success")
+        return jsonify({"status": "success"})
     except Exception as e:
-        logging.error(e)
-        return jsonify(status='error', message=str(e)), 500
+        log_error(e, "Create Unallocated Distributions")
+        return jsonify({"status": "error", "message": str(e)})
 
 @app.route('/api/save_settings', methods=['POST'])
 def save_settings_api():
