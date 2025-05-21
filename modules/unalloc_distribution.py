@@ -388,8 +388,35 @@ def run_unalloc_distribution(
 
     # Chem cost (only pads present in Main-Combo)
     df_current = df_current_raw.copy()
-    chem_by_pad = df_current.groupby("Project Number")["Chem Cost"].sum()
-    df_main["Chem Cost"] = df_main["Pad No"].map(chem_by_pad).fillna(0)
+    
+    # --- make absolutely sure both keys are the same dtype -----------------
+    df_current["Project Number"] = (
+        pd.to_numeric(df_current["Project Number"], errors="coerce")
+          .astype("Int64")           # nullable int so NaNs survive
+    )
+
+    df_main["Pad No"] = (
+        pd.to_numeric(df_main["Pad No"], errors="coerce")
+          .astype("Int64")
+    )
+
+    # clean chem column while we're here
+    df_current["Chem Cost"] = (
+        pd.to_numeric(df_current["Chem Cost"], errors="coerce")
+          .fillna(0)
+    )
+
+    chem_by_pad = (
+        df_current
+        .groupby("Project Number")["Chem Cost"]
+        .sum()
+    )
+
+    df_main["Chem Cost"] = (
+        df_main["Pad No"]
+          .map(chem_by_pad)
+          .fillna(0)
+    )
 
     # ── NEW: guard + weighted-proppant helper ─────────────
     if "Avg. Client Provided" not in df_main.columns:

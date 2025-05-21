@@ -15,3 +15,5 @@ config.ini
 
 # .twbx files
 *.twbx
+
+__pycache__
