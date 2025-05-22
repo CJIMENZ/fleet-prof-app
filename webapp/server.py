@@ -112,9 +112,9 @@ def pivot_cks_data():
 def download_views():
     try:
         data = request.json
-        log_user_action("Download Views", f"Output folder: {data.get('output_folder')}")
+        log_user_action("Download Views", f"Save directory: {data.get('save_dir')}")
         
-        output = download_all_views(config, data['output_folder'])
+        output = download_all_views(config, data['save_dir'])
         log_operation_result("Download Views", "Success", f"Output: {output}")
         return jsonify({"status": "success", "output": output})
     except Exception as e:
