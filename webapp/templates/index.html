@@ -176,7 +176,7 @@
       }
       async function generateVmAdj() {
         const data = { workbook: document.getElementById('vm_adj_file').value };
-        const res = await postJson('/api/generate_vm_adj', data);
+        const res = await postJson('/api/generate_project_vm_adj', data);
         alert(res.status === 'success' ? 'VM Adjustment generated' : res.message);
       }
       async function runUnalloc() {
@@ -185,7 +185,7 @@
           start: document.getElementById('unalloc_start').value,
           end: document.getElementById('unalloc_end').value
         };
-        const res = await postJson('/api/run_unalloc_distribution', data);
+        const res = await postJson('/api/create_unalloc_distributions', data);
         alert(res.status === 'success' ? 'Distribution complete' : res.message);
       }
     </script>

@@ -153,12 +153,13 @@ def build_monthly_db():
 def generate_pnl_pivot_endpoint():
     try:
         data = request.json
-        log_user_action("Generate PnL Pivot", f"File: {data.get('month_data_file')}")
-        
-        if data.get('month_data_file'):
-            log_file_operation("Read", data['month_data_file'])
+        month_file = data.get('month_file') or data.get('month_data_file')
+        log_user_action("Generate PnL Pivot", f"File: {month_file}")
 
-        generate_pnl_pivot(data['month_data_file'])
+        if month_file:
+            log_file_operation("Read", month_file)
+
+        generate_pnl_pivot(month_file)
         log_operation_result("Generate PnL Pivot", "Success")
         return jsonify({"status": "success"})
     except Exception as e:
@@ -169,12 +170,13 @@ def generate_pnl_pivot_endpoint():
 def generate_project_vm_adj_endpoint():
     try:
         data = request.json
-        log_user_action("Generate Project VM Adjustment", f"File: {data.get('month_data_file')}")
-        
-        if data.get('month_data_file'):
-            log_file_operation("Read", data['month_data_file'])
+        workbook = data.get('workbook') or data.get('month_data_file')
+        log_user_action("Generate Project VM Adjustment", f"File: {workbook}")
 
-        generate_project_vm_adj(data['month_data_file'])
+        if workbook:
+            log_file_operation("Read", workbook)
+
+        generate_project_vm_adj(workbook)
         log_operation_result("Generate Project VM Adjustment", "Success")
         return jsonify({"status": "success"})
     except Exception as e:
@@ -185,19 +187,19 @@ def generate_project_vm_adj_endpoint():
 def create_unalloc_distributions():
     try:
         data = request.json
-        log_user_action("Create Unallocated Distributions", 
-                       f"File: {data.get('workbook')}, "
-                       f"Month: {data.get('month')}")
-        
-        if data.get('workbook'):
-            log_file_operation("Read", data['workbook'])
-
-        run_unalloc_distribution(
-            data['workbook'],
-            data['month_start'],
-            data['month_end']
+        start = data.get('start') or data.get('month_start')
+        end = data.get('end') or data.get('month_end')
+        log_user_action(
+            "Create Unallocated Distributions",
+            f"File: {data.get('workbook')}, Start: {start}, End: {end}"
         )
-        
+
+        workbook = data.get('workbook')
+        if workbook:
+            log_file_operation("Read", workbook)
+
+        run_unalloc_distribution(workbook, start, end)
+
         log_operation_result("Create Unallocated Distributions", "Success")
         return jsonify({"status": "success"})
     except Exception as e:
