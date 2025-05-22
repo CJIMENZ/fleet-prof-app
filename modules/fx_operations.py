@@ -211,21 +211,8 @@ def update_fx_ref(ref_file_path, latest_month, fx, fx_col_name="CAD/USD"):
             fx_df = pd.concat([fx_df, pd.DataFrame([new_row])], ignore_index=True)
             logging.info(f"Appended new FX => [Date={latest_month}, {fx_col_name}={fx}]")
 
-        # Create a new workbook with the FX sheet
-        new_wb = Workbook()
-        default_sheet = new_wb.active
-        new_wb.remove(default_sheet)
-        
-        # Create the FX sheet
-        fx_sheet = new_wb.create_sheet("FX")
-        
-        # Write the data
-        for r_idx, row in enumerate(dataframe_to_rows(fx_df, index=False, header=True), 1):
-            for c_idx, value in enumerate(row, 1):
-                fx_sheet.cell(row=r_idx, column=c_idx, value=value)
-
-        # Save the workbook
-        new_wb.save(ref_file_path)
+        with pd.ExcelWriter(ref_file_path, engine="openpyxl", mode="a", if_sheet_exists="replace") as writer:
+            fx_df.to_excel(writer, sheet_name="FX", index=False)
 
     except Exception as e:
         logging.error(f"Error in update_fx_ref: {e}")
