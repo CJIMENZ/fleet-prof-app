@@ -42,7 +42,7 @@ def integrate_tableau(
     config_parser,
     new_workbook_path,
     latest_month,
-    view_id="79a33d76-77fd-4c1d-846c-18b02c606d71",
+    view_id="647bd58f-3898-4479-b2e8-499bdb9ac248",
 ):
     """
     Downloads the PnL_CAN_GL crosstab filtered by ``latest_month`` from Tableau
@@ -61,10 +61,12 @@ def integrate_tableau(
 
         # fetch the crosstab Excel filtered by the provided month
         field = "Year-Month String"
-        field_q = parse.quote_plus(field)
-        value_q = parse.quote_plus(str(latest_month))
+        # encode using quote to ensure spaces become '%20' for Tableau
+        field_q = parse.quote(field)
+        value_q = parse.quote(str(latest_month))
         endpoint = (
-            f"/api/{conn.api_version}/sites/{site_id}/views/{view_id}/crosstab/excel?vf_{field_q}={value_q}"
+            f"/api/{conn.api_version}/sites/{site_id}/views/{view_id}/crosstab/excel"
+            f"?vf_{field_q}={value_q}"
         )
         full_url = conn.server + endpoint
         headers = {"X-Tableau-Auth": conn.auth_token}

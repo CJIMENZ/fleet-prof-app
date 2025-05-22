@@ -40,7 +40,7 @@ def main():
             screen = webview.screens[0]
             screen_w = getattr(screen, 'width', None) or screen['width']
             screen_h = getattr(screen, 'height', None) or screen['height']
-            width = int(screen_w * 0.45)
+            width = int(screen_w * 0.33)
             height = int(screen_h * 0.9)
     except Exception:
         pass
