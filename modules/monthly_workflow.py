@@ -59,7 +59,7 @@ def run_fx_and_comparison(
     new_wb = create_comparison_sheet(new_wb, latest_month, ref_file_path)
 
     logging.info("run_fx_and_comparison workflow completed successfully.")
-    return new_wb
+    return new_wb, latest_month
 
 if __name__ == "__main__":
     import configparser

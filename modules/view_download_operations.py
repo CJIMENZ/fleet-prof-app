@@ -6,6 +6,7 @@ from io import BytesIO
 from datetime import datetime
 import requests
 from openpyxl import Workbook, load_workbook
+from urllib import parse
 from modules.tableau_operations import get_tableau_connection, sign_out_tableau
 
 # Updated list of consolidated views
@@ -26,10 +27,12 @@ _WORKBOOK_VIEWS = {
     ]
 }
 
-def download_all_views(config_parser, save_dir):
+def download_all_views(config_parser, save_dir, latest_month=None):
     """
     Signs in once, fetches all configured views as crosstab/excel,
     appends each to its own sheet, then signs out and saves one workbook.
+    If ``latest_month`` is provided, it will be passed to Tableau as the
+    ``"Year-Month String"`` parameter so each view is filtered to that month.
     Returns the full path of the saved file.
     """
     conn    = get_tableau_connection(config_parser)
@@ -51,9 +54,15 @@ def download_all_views(config_parser, save_dir):
                 count += 1
 
             try:
+                field_q = parse.quote("Year-Month String")
+                param = ""
+                if latest_month:
+                    value_q = parse.quote(str(latest_month))
+                    param = f"?vf_{field_q}={value_q}"
+
                 url = (
                     f"{tab_cfg['server']}/api/{conn.api_version}"
-                    f"/sites/{site_id}/views/{view_id}/crosstab/excel"
+                    f"/sites/{site_id}/views/{view_id}/crosstab/excel{param}"
                 )
                 headers = {"X-Tableau-Auth": conn.auth_token}
                 resp    = requests.get(url, headers=headers)

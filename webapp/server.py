@@ -73,16 +73,19 @@ def update_fx_compare():
             log_file_operation("Read", data['oracle_aud'])
 
         ref_file = config['files'].get('ref_data_path', '')
-        run_fx_and_comparison(
+        new_wb, latest_month = run_fx_and_comparison(
             config_parser=config,
             oracle_usd_path=data['oracle_usd'],
             oracle_cad_path=data['oracle_cad'],
             ref_file_path=ref_file,
             oracle_aud_path=data.get('oracle_aud')
         )
+
+        config['files']['latest_month'] = latest_month
+        save_config(config)
         
         log_operation_result("Update FX/Compare", "Success")
-        return jsonify({"status": "success"})
+        return jsonify({"status": "success", "latest_month": latest_month})
     except Exception as e:
         log_error(e, "Update FX/Compare")
         return jsonify({"status": "error", "message": str(e)})
@@ -114,7 +117,8 @@ def download_views():
         data = request.json
         log_user_action("Download Views", f"Save directory: {data.get('save_dir')}")
         
-        output = download_all_views(config, data['save_dir'])
+        latest_month = config['files'].get('latest_month')
+        output = download_all_views(config, data['save_dir'], latest_month)
         log_operation_result("Download Views", "Success", f"Output: {output}")
         return jsonify({"status": "success", "output": output})
     except Exception as e:

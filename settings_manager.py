@@ -29,7 +29,8 @@ def load_config():
         config["logging"] = {"level": "INFO"}
         config["files"] = {
             "ref_data_path": r"C:\path\to\RefData.xlsx",
-            "master_file_path": r"C:\path\to\MasterFile.xlsx"
+            "master_file_path": r"C:\path\to\MasterFile.xlsx",
+            "latest_month": ""
         }
         config["appearance"] = {
             "theme": "journal"
