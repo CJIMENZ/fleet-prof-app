@@ -286,7 +286,7 @@ def run_unalloc_distribution(
 ) -> None:
 
     print(f"\n[INFO] ► Unalloc Distribution run for: {workbook_path}")
-    print(f"       Window: {month_start} → {month_end}\n")
+    print(f"       Window: {month_start} -> {month_end}\n")
 
     try:
         wb = load_workbook(workbook_path, data_only=True)   # keep open for write-back

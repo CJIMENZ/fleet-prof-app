@@ -15,7 +15,14 @@ async function refreshLogs(){
   out.textContent = data.lines.join('\n');
   out.scrollTop = out.scrollHeight;
 }
+function adjustLogHeight(){
+  const pre = document.getElementById('log_output');
+  const rect = pre.getBoundingClientRect();
+  const available = window.innerHeight - rect.top - 40;
+  pre.style.height = available + 'px';
+}
 setInterval(refreshLogs, 2000);
-document.addEventListener('DOMContentLoaded', refreshLogs);
+document.addEventListener('DOMContentLoaded', () => { adjustLogHeight(); refreshLogs(); });
+window.addEventListener('resize', adjustLogHeight);
 </script>
 {% endblock %} 

@@ -45,6 +45,8 @@ def setup_logging():
     # Configure root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
+    # Silence noisy werkzeug request logs
+    logging.getLogger('werkzeug').setLevel(logging.WARNING)
 
     # Console handler with colors
     console_handler = logging.StreamHandler()

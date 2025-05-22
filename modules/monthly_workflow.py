@@ -3,8 +3,8 @@ modules/monthly_workflow.py
 
 Orchestrates:
  1) create_new_workbook (CAD)
- 2) calculate_fx_n5 => CAD→USD
- 3) calculate_fx_n5_aud => AUD→USD (if oracle_aud_path is provided)
+ 2) calculate_fx_n5 => CAD->USD
+ 3) calculate_fx_n5_aud => AUD->USD (if oracle_aud_path is provided)
  4) clean_cad_data
  5) integrate_tableau => 'PnL_CAN_GL'
  6) create_comparison_sheet => merges into 'Comparison'
@@ -30,24 +30,24 @@ def run_fx_and_comparison(
     oracle_aud_path=None
 ):
     """
-    If oracle_aud_path is provided, also compute AUD→USD from 'LOS Management Report IS29'.
+    If oracle_aud_path is provided, also compute AUD->USD from 'LOS Management Report IS29'.
     """
     logging.info("Starting run_fx_and_comparison workflow.")
 
     # 1) create new workbook (USD + CA)
     new_wb = create_new_workbook(oracle_usd_path, oracle_cad_path)
 
-    # 2) CAD→USD
+    # 2) CAD->USD
     fx_val, latest_month = calculate_fx_n5(new_wb, ref_file_path)
-    logging.info(f"CAD→USD = {fx_val}, month={latest_month}")
+    logging.info(f"CAD->USD = {fx_val}, month={latest_month}")
 
-    # 2b) If we have an AUD file, do the AUD→USD logic
+    # 2b) If we have an AUD file, do the AUD->USD logic
     if oracle_aud_path:
-        logging.info("AUD file provided. Calculating AUD→USD FX.")
+        logging.info("AUD file provided. Calculating AUD->USD FX.")
         # We pass the same 'latest_month' so both share the same date label
         calculate_fx_n5_aud(oracle_usd_path, oracle_aud_path, ref_file_path, existing_month=latest_month)
     else:
-        logging.info("No AUD file provided, skipping AUD→USD calc.")
+        logging.info("No AUD file provided, skipping AUD->USD calc.")
 
     # 3) Clean CAD => 'Data Sort CAD'
     new_wb, latest_month = clean_cad_data(new_wb, latest_month)

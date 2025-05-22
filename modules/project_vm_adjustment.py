@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
 """
-Finance‑grade Project VM workbook builder
+Finance‑grade Project VM workbook builder
 ----------------------------------------
 
 Creates (in this order):
-    1. P. VM ‑ All USD
-    2. P. VM ‑ Current
-    3. P. VM ‑ Previous
-    4. P. VM ‑ Unalloc
-    5. P. VM ‑ Unass
-    6. P. VM ‑ Adjustments   (summary, split buckets, manual grid)
+    1. P. VM ‑ All USD
+    2. P. VM ‑ Current
+    3. P. VM ‑ Previous
+    4. P. VM ‑ Unalloc
+    5. P. VM ‑ Unass
+    6. P. VM ‑ Adjustments   (summary, split buckets, manual grid)
 
 Key rules
 ~~~~~~~~~
-* CAD → USD rate = last numeric value in column 124
-* AUD → USD rate = last numeric value in column 125
-* Project_VM numeric fields pulled by **fixed indices 45‑56** — duplicate
-  headers elsewhere can’t interfere.
+* CAD -> USD rate = last numeric value in column 124
+* AUD -> USD rate = last numeric value in column 125
+* Project_VM numeric fields pulled by **fixed indices 45‑56** — duplicate
+  headers elsewhere can't interfere.
 * All headers are stripped (`.strip()`) immediately after load.
-* Every detail sheet gets a bold Grand Total row inserted as row 2.
+* Every detail sheet gets a bold Grand Total row inserted as row 2.
 
 Run:
     python main.py <MonthlyDataFile.xlsx>
@@ -67,7 +67,7 @@ HEADER_ROW      = 2
 PIVOT_MARKER    = "Q-Y"
 PIVOT_MONTH_COL = "M-Y"
 
-# cost fields to flip sign in CK vs VM comparison
+# cost fields to flip sign in CK vs VM comparison
 COST_FIELDS = {
     "PROP COST","TRUCK COST","CHEM COST","FUEL COST",
     "MAT COST","OTHER PAD COST","ALLOC VM COST"
@@ -171,7 +171,7 @@ FORMULA_FILL = PatternFill("solid","D9D9D9","D9D9D9")
 
 def _add_grand_total(ws, first_num_col: int):
     ws.insert_rows(2)
-    ws.cell(2,1,"Grand Total").font = Font(bold=True)
+    ws.cell(2,1,"Grand Total").font = Font(bold=True)
     for col in range(first_num_col, ws.max_column + 1):
         L = get_column_letter(col)
         c = ws.cell(2, col, f"=SUM({L}3:{L}{ws.max_row})")
@@ -181,11 +181,11 @@ def _add_grand_total(ws, first_num_col: int):
         c.fill = FORMULA_FILL
 
 # -------------------------------------------------------------------- #
-#  Extract Comparison block (CK vs VM)
+#  Extract Comparison block (CK vs VM)
 # -------------------------------------------------------------------- #
 def _extract_comparison_adjustments(wb) -> pd.DataFrame:
     if "PnL Pivot" not in wb.sheetnames:
-        log.warning("PnL Pivot sheet not found – skipping CK‑VM adjustments")
+        log.warning("PnL Pivot sheet not found – skipping CK-VM adjustments")
         return pd.DataFrame(columns=MANUAL_COLUMNS)
 
     ws_cmp = wb["PnL Pivot"]
@@ -194,7 +194,7 @@ def _extract_comparison_adjustments(wb) -> pd.DataFrame:
     title_row = next((r for r in range(1, ws_cmp.max_row+1)
                       if str(ws_cmp.cell(r,1).value).strip()=="Comparison"),None)
     if title_row is None:
-        log.warning("Comparison block not found – skipping")
+        log.warning("Comparison block not found – skipping")
         return pd.DataFrame(columns=MANUAL_COLUMNS)
     hdr_row = title_row + 1
 
@@ -344,7 +344,7 @@ def generate_project_vm_adj(path: str) -> None:
         ws_adj.cell(2,i,ck_sums[f]).number_format="$#,##0.00"
         ws_adj.cell(4,i,vm_totals[f]).number_format="$#,##0.00"
 
-    # bucket rows 6‑9
+    # bucket rows 6-9
     for r,(lbl,sums) in enumerate(
         [("↳ Current Projects",vm_curr),
          ("↳ Previous Projects",vm_prev),
@@ -370,11 +370,11 @@ def generate_project_vm_adj(path: str) -> None:
 
         ws_adj.cell(11, col, formula).number_format = "$#,##0.00"
         
-        c12=ws_adj.cell(12,col)  # will set after manual‑grid row‑start known
+        c12=ws_adj.cell(12,col)  # will set after manual-grid row-start known
         c12.number_format="$#,##0.00"
         for row in (11,12):
             ws_adj.cell(row,col).fill=FORMULA_FILL
-    ws_adj.cell(11,3,"Necessary Adjustment (CK−VM)").font=bold
+    ws_adj.cell(11,3,"Necessary Adjustment (CK-VM)").font=bold
     ws_adj.cell(12,3,"Adjustment Subtotal").font=bold
 
     # ----------- NEW ROWS 14 & 15 ------------------------------------ #
@@ -398,15 +398,15 @@ def generate_project_vm_adj(path: str) -> None:
     # ------------------------------------------------------------------ #
     MAN_LABEL_ROW   = 17
     MAN_HEADER_ROW  = 18
-    MAN_DATA_START  = 19   # used in Adjustment Subtotal formula
+    MAN_DATA_START  = 19   # used in Adjustment Subtotal formula
 
-    # update Adjustment Subtotal row‑12 formula range now that row‑start known
+    # update Adjustment Subtotal row-12 formula range now that row-start known
     for col in range(4,4+len(SUMMARY_FIELDS)):
         L=get_column_letter(col)
         ws_adj.cell(12,col,
             f"=SUM({L}{MAN_DATA_START}:{L}200)").fill=FORMULA_FILL
 
-    # Transload pre‑fill
+    # Transload pre-fill
     df_trans=_read_block(wsdb,"BF","BM")
     df_trans["Adjusted NC"]=_to_number(df_trans["Adjusted NC"])
     df_t=df_trans[df_trans["Account Desc"]=="PROPPANT TRANSLOADING"].copy()
@@ -432,7 +432,7 @@ def generate_project_vm_adj(path: str) -> None:
         })
     df_prefill=pd.DataFrame(rows,columns=MANUAL_COLUMNS)
 
-    # CK‑VM comparison adjustments
+    # CK-VM comparison adjustments
     df_cmp_adj=_extract_comparison_adjustments(wb)
     df_manual=pd.concat([df_prefill,df_cmp_adj],ignore_index=True)
 

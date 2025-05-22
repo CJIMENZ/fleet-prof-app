@@ -20,12 +20,12 @@ def pivot_cks_data_to_ref(finance_file, ref_file, target_month_str):
     """
     Reads 'NIS Details by Basin - US', 'NIS Details by Basin - CA', and now
     'NIS Details by Basin - AU' from finance_file,
-    finds the column in row 3 == target_month_str (Mon-YY),
+    finds the column in row 3 == target_month_str (Mon-YY),
     pivots by scanning column A (basin) & F (data field),
     then appends (with Date/Year/Month/Q/M-Y/Q-Y) to
     ref_file's 'CK data Pivot' sheet.
     """
-    logging.info(f"Pivoting CKs data from '{finance_file}' for {target_month_str} → '{ref_file}'.")
+    logging.info(f"Pivoting CKs data from '{finance_file}' for {target_month_str} -> '{ref_file}'.")
 
     # 1) Load the finance (CKs) workbook
     try:
@@ -78,7 +78,7 @@ def pivot_cks_data_to_ref(finance_file, ref_file, target_month_str):
         "District - Other District Cost": ["Other District Cost"],
     }
 
-    # 6) Locate the target‐month column in row 3
+    # 6) Locate the target‐month column in row 3
     def find_month_col(ws):
         for col in range(1, ws.max_column + 1):
             val = ws.cell(row=3, column=col).value
@@ -95,7 +95,7 @@ def pivot_cks_data_to_ref(finance_file, ref_file, target_month_str):
     col_us = find_month_col(ws_us)
     col_ca = find_month_col(ws_ca)
     if not col_us or not col_ca:
-        logging.error(f"Month '{target_month_str}' not found in row 3 of US/CA.")
+        logging.error(f"Month '{target_month_str}' not found in row 3 of US/CA.")
         sys.exit(f"Cannot find column for {target_month_str}")
 
     # 7) Compute date columns
@@ -117,7 +117,7 @@ def pivot_cks_data_to_ref(finance_file, ref_file, target_month_str):
         maxr = ws.max_row
         for idx, basin_dest in enumerate(dest_list):
             basin_src = src_list[idx]
-            # find basin row in col A
+            # find basin row in col A
             basin_row = next(
                 (r for r in range(1, maxr+1)
                  if str(ws.cell(r,1).value or "").strip() == basin_src),
@@ -162,9 +162,9 @@ def pivot_cks_data_to_ref(finance_file, ref_file, target_month_str):
         ws_au = wb_fin[au_sheet]
         col_au = find_month_col(ws_au)
         if not col_au:
-            logging.warning(f"Month '{target_month_str}' not in row 3 of '{au_sheet}'. Skipping AU.")
+            logging.warning(f"Month '{target_month_str}' not in row 3 of '{au_sheet}'. Skipping AU.")
         else:
-            # fill‑down blanks in col A
+            # fill down blanks in col A
             last = None
             for r in range(1, ws_au.max_row+1):
                 v = ws_au.cell(r,1).value

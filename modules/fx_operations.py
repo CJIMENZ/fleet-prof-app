@@ -3,8 +3,8 @@ modules/fx_operations.py
 
 Handles:
   - create_new_workbook(oracle_usd_path, oracle_cad_path) for CAD
-  - calculate_fx_n5(...) for CAD→USD
-  - calculate_fx_n5_aud(...) for AUD→USD
+  - calculate_fx_n5(...) for CAD->USD
+  - calculate_fx_n5_aud(...) for AUD->USD
   - clean_cad_data(...)
   - update_fx_ref(...) helper
 """
@@ -66,7 +66,7 @@ def calculate_fx_n5(new_workbook_path, ref_table_path):
     Calls update_fx_ref(..., fx_col_name='CAD/USD').
     Returns (fx, latest_month).
     """
-    logging.info("Calculating CAD→USD FX (N5).")
+    logging.info("Calculating CAD->USD FX (N5).")
     try:
         wb = load_workbook(new_workbook_path)
         usd_sheet = wb["USD"]
@@ -88,11 +88,11 @@ def calculate_fx_n5(new_workbook_path, ref_table_path):
 
         update_fx_ref(ref_table_path, latest_month, fx, fx_col_name="CAD/USD")
         wb.save(new_workbook_path)
-        logging.info("Saved workbook after CAD→USD FX calc.")
+        logging.info("Saved workbook after CAD->USD FX calc.")
         return fx, latest_month
     except Exception as e:
         logging.error(f"Error in calculate_fx_n5: {e}")
-        sys.exit("CAD→USD calculation failed.")
+        sys.exit("CAD->USD calculation failed.")
 
 def calculate_fx_n5_aud(oracle_usd_path, oracle_aud_path, ref_table_path, existing_month=None):
     """
@@ -103,7 +103,7 @@ def calculate_fx_n5_aud(oracle_usd_path, oracle_aud_path, ref_table_path, existi
     Then appends "AUD/USD" to the RefData 'FX' sheet (for the same month as existing_month
     if provided, else we identify the last column header from the USD sheet).
     """
-    logging.info("Calculating AUD→USD FX by scanning column N for the first non-zero row.")
+    logging.info("Calculating AUD->USD FX by scanning column N for the first non-zero row.")
     try:
         # 1) Load the Oracle USD workbook, sheet "LOS Management Report IS19"
         usd_wb = load_workbook(oracle_usd_path, data_only=True)
@@ -139,15 +139,15 @@ def calculate_fx_n5_aud(oracle_usd_path, oracle_aud_path, ref_table_path, existi
                     continue
 
         if not found_ratio:
-            raise ValueError("No valid non-zero pair found in column N for AUD→USD calculation.")
+            raise ValueError("No valid non-zero pair found in column N for AUD->USD calculation.")
 
         ratio = aud_ratio_val / usd_ratio_val
-        logging.info(f"AUD→USD ratio found: AUD={aud_ratio_val}, USD={usd_ratio_val}, ratio={ratio}")
+        logging.info(f"AUD->USD ratio found: AUD={aud_ratio_val}, USD={usd_ratio_val}, ratio={ratio}")
 
         # 4) Determine latest_month
         if existing_month:
             latest_month = existing_month
-            logging.info(f"Using existing month: {existing_month} for AUD→USD")
+            logging.info(f"Using existing month: {existing_month} for AUD->USD")
         else:
             # If none provided, read the last column header in row=2 of the USD sheet
             max_col = usd_sheet.max_column
@@ -160,7 +160,7 @@ def calculate_fx_n5_aud(oracle_usd_path, oracle_aud_path, ref_table_path, existi
 
     except Exception as e:
         logging.error(f"Error in calculate_fx_n5_aud: {e}")
-        sys.exit("AUD→USD calculation failed.")
+        sys.exit("AUD->USD calculation failed.")
 
 
 def update_fx_ref(ref_file_path, latest_month, fx, fx_col_name="CAD/USD"):

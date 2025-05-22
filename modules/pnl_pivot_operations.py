@@ -20,8 +20,8 @@ _VM_FIRST_NUM = 41
 _VM_LAST_NUM  = 56
 
 # FX block                              123–125
-_FX_COL_DATE   = 123   # FX – Date
-_FX_COL_CADUSD = 124   # FX – CAD/USD
+_FX_COL_DATE   = 123   # FX – Date
+_FX_COL_CADUSD = 124   # FX – CAD/USD
 
 # ---------- Basin aliases ---------------------------------------------------
 # Any spelling on the LEFT will be treated as the canonical label on the RIGHT
@@ -111,7 +111,7 @@ def generate_pnl_pivot(month_data_path: str) -> None:
 
     # ---------------- FX (CAD/USD) lookup -----------------------------------
     fx_rate = _find_cad_usd_rate(wsdb, latest_month)
-    logging.info(f"CAD/USD for {latest_month} → {fx_rate}")
+    logging.info(f"CAD/USD for {latest_month} -> {fx_rate}")
 
     # ---------------- rebuild PnL Pivot sheet --------------------------------
     if "PnL Pivot" in wb.sheetnames:
@@ -136,7 +136,7 @@ def generate_pnl_pivot(month_data_path: str) -> None:
 
     row_ptr = 4  # rolling pointer down the sheet
 
-    # 1) CK PnL ---------------------------------------------------------------
+    # 1) CK PnL ---------------------------------------------------------------
     row_ptr = _write_block(
         ws, "CK PnL", row_ptr, basins_ck, _PNL_FIELDS,
         _header_to_letter_map(ck_headers, start_ck),
@@ -147,7 +147,7 @@ def generate_pnl_pivot(month_data_path: str) -> None:
         bold=bold, hdr_align=hdr_align
     )
 
-    # 2) CK VM ----------------------------------------------------------------
+    # 2) CK VM ----------------------------------------------------------------
     row_ptr = _write_block(
         ws, "CK VM", row_ptr + 2, basins_ck, _CK_FIELDS,
         {f: get_column_letter(_CK_COL_NUM[f]) for f in _CK_FIELDS},
@@ -161,7 +161,7 @@ def generate_pnl_pivot(month_data_path: str) -> None:
     ck_data_row0 = ck_hdr_row + 1
     ck_data_last = ck_data_row0 + len(basins_ck) - 1
 
-    # 3) Project VM (CAD→USD) -------------------------------------------------
+    # 3) Project VM (CAD->USD) -------------------------------------------------
     row_ptr = _write_block(
         ws, "Project VM", row_ptr + 2, basins_vm, _VM_FIELDS,
         {f: get_column_letter(_VM_COL_NUM[f]) for f in _VM_FIELDS},
@@ -176,7 +176,7 @@ def generate_pnl_pivot(month_data_path: str) -> None:
     vm_data_row0 = vm_hdr_row + 1
     vm_data_last = vm_data_row0 + len(basins_vm) - 1
 
-    # ------ build row maps (canonical name → worksheet row) -----------------
+    # ------ build row maps (canonical name -> worksheet row) -----------------
     ck_row_map = {_canonical(b): ck_data_row0 + i
                   for i, b in enumerate(basins_ck)}
     vm_row_map = {_canonical(b): vm_data_row0 + i
@@ -198,7 +198,7 @@ def generate_pnl_pivot(month_data_path: str) -> None:
 # --------------------------------------------------------------------------- #
 #  Helper: find CAD/USD for the selected month
 def _find_cad_usd_rate(wsdb, month_label: str) -> float:
-    """Return CAD/USD matching month_label, else last numeric in col 124."""
+    """Return CAD/USD matching month_label, else last numeric in col 124."""
     from datetime import datetime
     for r in range(3, wsdb.max_row + 1):
         dt = wsdb.cell(r, _FX_COL_DATE).value
@@ -223,7 +223,7 @@ def _write_block(
     basin_col: str, my_col: str, last_db_row: int, use_month: bool,
     bold: Font, hdr_align: Alignment, cad_fx_cell: str = None
 ) -> int:
-    """Generic writer for CK PnL, CK VM, Project VM blocks."""
+    """Generic writer for CK PnL, CK VM, Project VM blocks."""
     hdr_row = start_row + 1
     ws.merge_cells(start_row=start_row, start_column=1,
                    end_row=start_row,   end_column=len(fields) + 1)
@@ -275,7 +275,7 @@ def _write_comparison_block(
     ck_row_map: Dict[str, int], vm_row_map: Dict[str, int],
     bold: Font, hdr_align: Alignment
 ) -> int:
-    """CK – VM (rev) or CK + VM (cost) by canonical basin name."""
+    """CK – VM (rev) or CK + VM (cost) by canonical basin name."""
     hdr_row = start_row + 1
     ws.merge_cells(start_row=start_row, start_column=1,
                    end_row=start_row,   end_column=len(fields) + 1)

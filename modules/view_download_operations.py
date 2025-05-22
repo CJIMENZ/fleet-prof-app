@@ -9,7 +9,7 @@ from openpyxl import Workbook, load_workbook
 from modules.tableau_operations import get_tableau_connection, sign_out_tableau
 
 # Updated list of consolidated views
-# You can group them under a single “workbook” key since they’re now all standalone views.
+# You can group them under a single "workbook" key since they're now all standalone views.
 _WORKBOOK_VIEWS = {
     'combined_views': [
         ('Main_Combo',          'c9cb3cd4-c259-4d49-a23c-439e1f0bd1c5'),
@@ -64,7 +64,7 @@ def download_all_views(config_parser, save_dir):
                 for row in tmp.iter_rows(values_only=True):
                     tgt.append(row)
 
-                logging.info(f"Fetched view '{view_name}' → sheet '{sheet_name}'")
+                logging.info(f"Fetched view '{view_name}' -> sheet '{sheet_name}'")
             except Exception as e:
                 logging.error(f"Failed to fetch '{view_name}': {e}")
                 continue

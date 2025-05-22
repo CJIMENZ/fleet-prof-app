@@ -239,7 +239,10 @@ def get_logs():
             return jsonify(lines=[])
         latest = max(files, key=os.path.getmtime)
         with open(latest, 'r') as fh:
-            lines = fh.readlines()[-200:]
+            lines = [
+                l for l in fh.readlines()[-200:]
+                if 'GET /api/logs' not in l
+            ]
         return jsonify(lines=[l.rstrip('\n') for l in lines])
     except Exception as e:
         logging.error(e)

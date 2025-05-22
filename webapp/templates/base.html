@@ -262,7 +262,10 @@
           <span class="navbar-toggler-icon"></span>
         </button>
 
-        <div class="collapse navbar-collapse" id="navbarNavDropdown">
+        <!-- brand before menu so it stays pinned when menu expands -->
+        <a class="navbar-brand ms-auto order-1 order-lg-2" href="/">Fleet Prof App</a>
+
+        <div class="collapse navbar-collapse order-2 order-lg-1" id="navbarNavDropdown">
           <ul class="navbar-nav">
             <li class="nav-item">
               <a class="nav-link" href="/"><i class="bi bi-house"></i> Home</a>
@@ -287,18 +290,16 @@
               <ul class="dropdown-menu">
                 <li><a class="dropdown-item" href="/update_fx"><i class="bi bi-currency-exchange me-2"></i>Update FX</a></li>
                 <li><a class="dropdown-item" href="/pivot_ck"><i class="bi bi-table me-2"></i>Pivot CK Data</a></li>
+                <li><a class="dropdown-item" href="/download_views"><i class="bi bi-download me-2"></i>Download Views</a></li>
                 <li><a class="dropdown-item" href="/build_db"><i class="bi bi-database me-2"></i>Build DB</a></li>
                 <li><a class="dropdown-item" href="/pnl_pivot"><i class="bi bi-graph-up me-2"></i>PnL Pivot</a></li>
                 <li><a class="dropdown-item" href="/vm_adj"><i class="bi bi-tools me-2"></i>Project VM Adj</a></li>
                 <li><a class="dropdown-item" href="/unalloc_dist"><i class="bi bi-diagram-3 me-2"></i>Unalloc Dist</a></li>
-                <li><a class="dropdown-item" href="/download_views"><i class="bi bi-download me-2"></i>Download Views</a></li>
+                
               </ul>
             </li>
           </ul>
         </div>
-
-        <!-- ⬅️  brand always on the far right -->
-        <a class="navbar-brand ms-auto" href="/">Fleet Prof App</a>
       </div>
     </nav>
     <div class="container py-4">
@@ -311,7 +312,7 @@
           <button id="hideLogs" class="btn btn-sm btn-secondary" onclick="toggleLogs()">Hide</button>
         </div>
         <div class="card-body p-2">
-          <pre id="log_output" style="height:200px; overflow-y:auto; background:#000; color:#0f0; font-size:0.9em;"></pre>
+          <pre id="footer_log_output" style="height:200px; overflow-y:auto; background:#000; color:#0f0; font-size:0.9em;"></pre>
         </div>
       </div>
     </div>
@@ -320,6 +321,16 @@
 
     <!-- Hover-open for hamburger and log panel support -->
     <script>
+      function adjustLogHeight() {
+        const container = document.getElementById('logContainer');
+        const pre = document.getElementById('footer_log_output');
+        if (container.style.display !== 'none') {
+          const rect = container.getBoundingClientRect();
+          const available = window.innerHeight - rect.top - 40;
+          pre.style.height = available + 'px';
+        }
+      }
+
       function toggleLogs() {
         const container = document.getElementById('logContainer');
         const showBtn = document.getElementById('showLogs');
@@ -328,6 +339,7 @@
           container.style.display = 'block';
           showBtn.style.display = 'none';
           hideBtn.style.display = 'inline-block';
+          adjustLogHeight();
           refreshLogs();
         } else {
           container.style.display = 'none';
@@ -338,7 +350,7 @@
       async function refreshLogs() {
         const res = await fetch('/api/logs');
         const data = await res.json();
-        const out = document.getElementById('log_output');
+        const out = document.getElementById('footer_log_output');
         out.textContent = data.lines.join('\n');
         out.scrollTop = out.scrollHeight;
       }
@@ -350,7 +362,9 @@
           toggler.addEventListener('mouseenter', () =>
             bootstrap.Collapse.getOrCreateInstance(collapse).show());
         }
+        adjustLogHeight();
       });
+      window.addEventListener('resize', adjustLogHeight);
 
       setInterval(() => {
         if (document.getElementById('logContainer').style.display !== 'none') {

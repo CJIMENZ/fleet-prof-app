@@ -91,7 +91,7 @@ def build_monthly_database(
 
     # 3) save
     wb.save(output_path)
-    print(f"Built monthly database sheet → {output_path}")
+    print(f"Built monthly database sheet -> {output_path}")
 
 
 if __name__ == "__main__":
