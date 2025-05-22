@@ -303,10 +303,16 @@ def generate_project_vm_adj(path: str) -> None:
     proj = dfdb.iloc[:,COL_PROJ_NUM-1].apply(
         lambda x:f"{int(x):06}" if pd.notna(x) and isinstance(x,(int,float))
                                else str(x).strip())
-    main_pads=set(dfdb.iloc[:,COL_MAIN_PAD-1].dropna()
-                              .astype(int).astype(str))
-    prev_pads=set(dfdb.iloc[:,COL_PREV_PAD-1].dropna()
-                              .astype(int).astype(str))
+    main_pads = set(pd.to_numeric(
+        dfdb.iloc[:, COL_MAIN_PAD-1], errors="coerce")
+                      .dropna()
+                      .astype(int)
+                      .astype(str))
+    prev_pads = set(pd.to_numeric(
+        dfdb.iloc[:, COL_PREV_PAD-1], errors="coerce")
+                      .dropna()
+                      .astype(int)
+                      .astype(str))
     masks={
         "Current": proj.isin(main_pads)&proj.str.match(r"^\d{6}$"),
         "Previous":(~proj.isin(main_pads))&proj.isin(prev_pads)&proj.str.match(r"^\d{6}$"),

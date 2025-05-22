@@ -542,6 +542,8 @@ def run_unalloc_distribution(
                 dataframe_to_rows(df, index=False, header=True), start=start_row):
             for c_idx, value in enumerate(row, start=1):
                 # ➋ normalise *every* timestamp that comes through here
+                if value is pd.NA or pd.isna(value):
+                    value = None
                 if isinstance(value, pd.Timestamp):
                     value = value.to_pydatetime()          # <-- plain datetime
                 if isinstance(value, datetime):
