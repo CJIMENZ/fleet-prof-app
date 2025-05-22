@@ -1,19 +1,22 @@
 # modules/report_generation.py
 
+import os
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
+from settings_manager import load_config
 
 def build_monthly_database(
     tableau_exports_path: str,
-    ref_data_path: str,
-    output_path: str
-):
+    output_dir: str,
+    config=None,
+) -> str:
     """
-    Create a 'Database' sheet in a fresh workbook at `output_path` that
+    Create a 'Database' sheet in a fresh workbook saved into
+    `output_dir/Monthly_Database.xlsx` that
     lays out, side-by-side, each source table from:
       - the Tableau export workbook (tableau_exports_path)
-      - the RefData workbook (ref_data_path)
+      - the RefData workbook configured in config.ini
 
     Each block is headed by a merged cell with the view name, then the
     column headers on row 2, and data beginning on row 3.  One blank column
@@ -36,6 +39,11 @@ def build_monthly_database(
         "FX",
         "CK data Pivot"
     ]
+
+    if config is None:
+        config = load_config()
+    ref_data_path = config["files"].get("ref_data_path", "")
+    output_path = os.path.join(output_dir, "Monthly_Database.xlsx")
 
     # load workbooks via pandas
     tbl_xl = pd.ExcelFile(tableau_exports_path)
@@ -64,8 +72,8 @@ def build_monthly_database(
         for i, col_name in enumerate(df.columns, start=start_col):
             ws.cell(row=2, column=i, value=col_name)
 
-        # 3) data rows from row 3
-        for r_idx, row in enumerate(df.itertuples(index=False), start=3):
+        # 3) data starting on row 3
+        for r_idx, row in enumerate(df.values, start=3):
             for c_idx, value in enumerate(row, start=start_col):
                 ws.cell(row=r_idx, column=c_idx, value=value)
 
@@ -92,11 +100,12 @@ def build_monthly_database(
     # 3) save
     wb.save(output_path)
     print(f"Built monthly database sheet -> {output_path}")
+    return output_path
 
 
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) != 4:
-        print("Usage: python report_generation.py <tableau_exports.xlsx> <ref_data.xlsx> <output.xlsx>")
+    if len(sys.argv) != 3:
+        print("Usage: python report_generation.py <tableau_exports.xlsx> <output_dir>")
         sys.exit(1)
-    build_monthly_database(sys.argv[1], sys.argv[2], sys.argv[3])
+    build_monthly_database(sys.argv[1], sys.argv[2])

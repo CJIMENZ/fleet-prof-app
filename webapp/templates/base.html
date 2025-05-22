@@ -202,8 +202,7 @@
         try {
           const data = {
             exports_file: document.getElementById('exports_file').value,
-            ref_data_file: document.getElementById('db_ref_file').value,
-            output_file: document.getElementById('db_output_file').value
+            output_dir: document.getElementById('db_output_dir').value
           };
           const res = await postJson('/api/build_monthly_db', data);
           alert(res.status === 'success' ? 'Database built' : res.message);

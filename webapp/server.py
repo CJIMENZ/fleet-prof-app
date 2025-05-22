@@ -125,26 +125,25 @@ def download_views():
 def build_monthly_db():
     try:
         data = request.json
-        log_user_action("Build Monthly Database", 
-                       f"Tableau exports: {data.get('tableau_exports')}, "
-                       f"Ref data: {data.get('ref_data')}, "
-                       f"Output: {data.get('output')}")
-        
-        # Log file operations
-        if data.get('tableau_exports'):
-            log_file_operation("Read", data['tableau_exports'])
-        if data.get('ref_data'):
-            log_file_operation("Read", data['ref_data'])
-        if data.get('output'):
-            log_file_operation("Write", data['output'])
-
-        build_monthly_database(
-            tableau_exports_path=data['tableau_exports'],
-            ref_data_path=data['ref_data'],
-            output_path=data['output']
+        log_user_action(
+            "Build Monthly Database",
+            f"Tableau exports: {data.get('exports_file')}, "
+            f"Output dir: {data.get('output_dir')}"
         )
         
-        log_operation_result("Build Monthly Database", "Success")
+        # Log file operations
+        if data.get('exports_file'):
+            log_file_operation("Read", data['exports_file'])
+        if data.get('output_dir'):
+            log_file_operation("Write", data['output_dir'])
+
+        output_path = build_monthly_database(
+            tableau_exports_path=data['exports_file'],
+            output_dir=data['output_dir'],
+            config=config
+        )
+
+        log_operation_result("Build Monthly Database", "Success", output_path)
         return jsonify({"status": "success"})
     except Exception as e:
         log_error(e, "Build Monthly Database")

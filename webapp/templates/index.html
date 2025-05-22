@@ -164,10 +164,9 @@
       async function buildDatabase() {
         const data = {
           exports_file: document.getElementById('exports_file').value,
-          ref_data_file: document.getElementById('db_ref_file').value,
-          output_file: document.getElementById('db_output_file').value
+          output_dir: document.getElementById('db_output_dir').value
         };
-        const res = await postJson('/api/build_monthly_database', data);
+        const res = await postJson('/api/build_monthly_db', data);
         alert(res.status === 'success' ? 'Database built' : res.message);
       }
       async function generatePnl() {
@@ -251,7 +250,6 @@
       </div>
 
       <div class="card mb-3">
-
         <div class="card-header bg-warning text-dark header-yellow">Build Monthly Database</div>
         <div class="card-body">
           <div class="mb-3">
@@ -262,17 +260,10 @@
             </div>
           </div>
           <div class="mb-3">
-            <label class="form-label">Reference Data</label>
+            <label class="form-label">Save Location</label>
             <div class="input-group">
-              <input type="text" id="db_ref_file" class="form-control">
-              <button class="btn btn-outline-secondary" onclick="selectFile('db_ref_file')">Browse</button>
-            </div>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Output File</label>
-            <div class="input-group">
-              <input type="text" id="db_output_file" class="form-control">
-              <button class="btn btn-outline-secondary" onclick="selectFile('db_output_file')">Browse</button>
+              <input type="text" id="db_output_dir" class="form-control">
+              <button class="btn btn-outline-secondary" onclick="selectFolder('db_output_dir')">Browse</button>
             </div>
           </div>
           <button class="btn btn-primary" onclick="buildDatabase()">Build</button>
@@ -280,7 +271,6 @@
       </div>
 
       <div class="card mb-3">
-
         <div class="card-header bg-secondary text-white header-green">Generate PnL Pivot</div>
         <div class="card-body">
           <div class="mb-3">
